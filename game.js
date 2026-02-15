@@ -24,7 +24,7 @@ const GAME_WIDTH = 1200;
 const GAME_HEIGHT = 600;
 
 // Game states
-const STATE = { MENU: 'menu', LEVEL_1: 'level1', LEVEL_2: 'level2', GAME_OVER: 'gameover', YOU_WON: 'youwon' };
+const STATE = { MENU: 'menu', LEVEL_1: 'level1', LEVEL_2: 'level2', LEVEL_3: 'level3', GAME_OVER: 'gameover', YOU_WON: 'youwon' };
 let gameState = STATE.MENU;
 
 // Physics
@@ -73,6 +73,33 @@ const platformsLevel2 = [
   { x: 80, y: 420, width: 180, height: 25 },             // left platform (index 1)
   { x: 940, y: 420, width: 180, height: 25 }            // right platform (index 2)
 ];
+
+// Level 3 - Super Breakout style
+const platformsLevel3 = [
+  { x: 0, y: 520, width: GAME_WIDTH, height: 80 }
+];
+
+// Level 3 - bricks and shields
+const bricks = [];
+const BRICK_WIDTH = 58;
+const BRICK_HEIGHT = 22;
+const BRICK_ROWS = 6;
+const BRICK_COLORS = ['#e63946', '#f4a261', '#e9c46a', '#2a9d8f', '#264653', '#9b5de5'];
+const shields = [];
+const LEVEL_3_TIME = 45;
+let level3TimeLeft = LEVEL_3_TIME;
+let level3Exploding = false;
+let level3ExplosionParticles = [];
+const eggSplats = [];
+const EXPLOSIVE_BRICK_RADIUS = 95;
+const LEVEL_3_FIRE_RATE = 6;
+let level3FireCooldown = 0;
+
+const spaceships = [];
+const SPACESHIP_WIDTH = 24;
+const SPACESHIP_HEIGHT = 16;
+const SPACESHIP_SPEED = 3;
+let level3SpaceshipSpawnTimer = 0;
 
 let platforms = platformsLevel1;
 
@@ -206,6 +233,49 @@ function initBoss() {
   boss.explosionTimer = 0;
 }
 
+function initBricks() {
+  bricks.length = 0;
+  const cols = Math.floor(GAME_WIDTH / (BRICK_WIDTH + 4));
+  const startX = (GAME_WIDTH - cols * (BRICK_WIDTH + 4) + 4) / 2;
+  for (let row = 0; row < BRICK_ROWS; row++) {
+    for (let col = 0; col < cols; col++) {
+      bricks.push({
+        x: startX + col * (BRICK_WIDTH + 4),
+        y: 60 + row * (BRICK_HEIGHT + 4),
+        width: BRICK_WIDTH,
+        height: BRICK_HEIGHT,
+        color: BRICK_COLORS[row % BRICK_COLORS.length],
+        explosive: false
+      });
+    }
+  }
+  const totalBricks = bricks.length;
+  const used = new Set();
+  for (let i = 0; i < 3; i++) {
+    let idx;
+    do { idx = Math.floor(Math.random() * totalBricks); } while (used.has(idx));
+    used.add(idx);
+    bricks[idx].explosive = true;
+    bricks[idx].color = '#22cc44';
+  }
+}
+
+function initShields() {
+  shields.length = 0;
+  shields.push(
+    { x: GAME_WIDTH / 2 - 60, y: 380, width: 120, height: 18, vx: 5 },
+    { x: GAME_WIDTH / 2 - 45, y: 320, width: 90, height: 16, vx: 7 },
+    { x: GAME_WIDTH / 2 - 35, y: 260, width: 70, height: 14, vx: 3 }
+  );
+  eggSplats.length = 0;
+  level3TimeLeft = LEVEL_3_TIME;
+  level3Exploding = false;
+  level3ExplosionParticles = [];
+  level3FireCooldown = 0;
+  spaceships.length = 0;
+  level3SpaceshipSpawnTimer = 0;
+}
+
 // Game state
 let health = 5;
 let gameOver = false;
@@ -227,6 +297,7 @@ document.addEventListener('keyup', (e) => {
 document.getElementById('retry-btn').addEventListener('click', () => {
   if (gameState === STATE.LEVEL_1) startLevel1();
   else if (gameState === STATE.LEVEL_2) startLevel2();
+  else if (gameState === STATE.LEVEL_3) startLevel3();
 });
 
 function startLevel1() {
@@ -243,6 +314,16 @@ function startLevel2() {
   platforms = platformsLevel2;
   resetGame();
   initBoss();
+  document.getElementById('ui-overlay').style.display = 'block';
+}
+
+function startLevel3() {
+  gameState = STATE.LEVEL_3;
+  level3Transitioning = false;
+  platforms = platformsLevel3;
+  resetGame();
+  initBricks();
+  initShields();
   document.getElementById('ui-overlay').style.display = 'block';
 }
 
@@ -264,6 +345,7 @@ function resetGame() {
   gameOver = false;
 
   document.getElementById('game-over-screen').classList.remove('visible');
+  document.getElementById('game-over-screen').querySelector('p').textContent = 'The chicken has lost all its eggs!';
   updateHealthDisplay();
 }
 
@@ -454,6 +536,195 @@ function drawBackgroundLevel2() {
   ctx.fillRect(0, 500, GAME_WIDTH, GAME_HEIGHT);
 }
 
+// ========== LEVEL 3 - Super Breakout ==========
+function drawBackgroundLevel3() {
+  const gradient = ctx.createLinearGradient(0, 0, 0, GAME_HEIGHT);
+  gradient.addColorStop(0, '#1a1a3a');
+  gradient.addColorStop(0.5, '#2d2d5a');
+  gradient.addColorStop(1, '#0f0f2a');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+  ctx.fillStyle = '#1a2a3a';
+  ctx.fillRect(0, 500, GAME_WIDTH, GAME_HEIGHT);
+}
+
+function drawBricks() {
+  bricks.forEach(b => {
+    if (b.explosive) {
+      const glow = 0.6 + 0.4 * Math.sin(Date.now() / 120);
+      ctx.shadowColor = '#00ff44';
+      ctx.shadowBlur = 12 + glow * 8;
+      ctx.fillStyle = '#22cc44';
+      ctx.fillRect(b.x, b.y, b.width, b.height);
+      ctx.fillStyle = '#44ff66';
+      ctx.fillRect(b.x + 3, b.y + 3, b.width - 6, b.height - 6);
+      ctx.shadowBlur = 0;
+    } else {
+      ctx.fillStyle = b.color;
+      ctx.fillRect(b.x, b.y, b.width, b.height);
+    }
+    ctx.strokeStyle = b.explosive ? 'rgba(0,255,100,0.6)' : 'rgba(255,255,255,0.3)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(b.x, b.y, b.width, b.height);
+  });
+}
+
+function drawShields() {
+  const shieldColors = ['#4a90d9', '#5aa0e9', '#3a80c9'];
+  shields.forEach((s, i) => {
+    ctx.fillStyle = shieldColors[i % shieldColors.length];
+    ctx.fillRect(s.x, s.y, s.width, s.height);
+    ctx.strokeStyle = '#2a70b9';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(s.x, s.y, s.width, s.height);
+  });
+}
+
+function drawEggSplats() {
+  eggSplats.forEach(s => {
+    ctx.fillStyle = 'rgba(255, 248, 231, ' + s.life + ')';
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+function spawnLevel3Spaceships() {
+  const count = Math.floor(Math.random() * 4);
+  const targetX = chicken.x + chicken.width / 2;
+  const targetY = chicken.y + chicken.height / 2;
+  for (let i = 0; i < count; i++) {
+    const fromLeft = Math.random() < 0.5;
+    const x = fromLeft ? -SPACESHIP_WIDTH - 5 : GAME_WIDTH + 5;
+    const y = 150 + Math.random() * 300;
+    const dx = targetX - x;
+    const dy = targetY - y;
+    const len = Math.hypot(dx, dy) || 1;
+    spaceships.push({
+      x, y,
+      vx: (dx / len) * SPACESHIP_SPEED,
+      vy: (dy / len) * SPACESHIP_SPEED,
+      width: SPACESHIP_WIDTH,
+      height: SPACESHIP_HEIGHT
+    });
+  }
+}
+
+function updateSpaceships() {
+  for (let i = spaceships.length - 1; i >= 0; i--) {
+    const s = spaceships[i];
+    s.x += s.vx;
+    s.y += s.vy;
+    if (s.x < -50 || s.x > GAME_WIDTH + 50 || s.y < -50 || s.y > GAME_HEIGHT + 50) {
+      spaceships.splice(i, 1);
+    }
+  }
+}
+
+function drawSpaceships() {
+  spaceships.forEach(s => {
+    const cx = s.x + s.width / 2;
+    const cy = s.y + s.height / 2;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(Math.atan2(s.vy, s.vx));
+    ctx.translate(-cx, -cy);
+    ctx.fillStyle = '#5aa0e9';
+    ctx.beginPath();
+    ctx.moveTo(s.x + s.width, s.y + s.height / 2);
+    ctx.lineTo(s.x, s.y);
+    ctx.lineTo(s.x + s.width / 2, s.y + s.height / 2);
+    ctx.lineTo(s.x, s.y + s.height);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#2a70b9';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.fillStyle = '#aaddff';
+    ctx.beginPath();
+    ctx.arc(s.x + s.width / 2, s.y + s.height / 2, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  });
+}
+
+function updateShields() {
+  shields.forEach(s => {
+    s.x += s.vx;
+    if (s.x <= 0) {
+      s.x = 0;
+      s.vx = Math.abs(s.vx);
+    }
+    if (s.x + s.width >= GAME_WIDTH) {
+      s.x = GAME_WIDTH - s.width;
+      s.vx = -Math.abs(s.vx);
+    }
+  });
+}
+
+function triggerLevel3Explosion() {
+  for (let i = 0; i < 120; i++) {
+    level3ExplosionParticles.push({
+      x: Math.random() * GAME_WIDTH,
+      y: Math.random() * GAME_HEIGHT,
+      vx: (Math.random() - 0.5) * 12,
+      vy: (Math.random() - 0.5) * 12,
+      size: 8 + Math.random() * 20,
+      life: 1,
+      color: ['#ff4444', '#ff8844', '#ffcc44', '#fff', '#e63946'][Math.floor(Math.random() * 5)]
+    });
+  }
+}
+
+function updateLevel3Explosion() {
+  level3ExplosionParticles.forEach(p => {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life -= 0.015;
+  });
+  level3ExplosionParticles = level3ExplosionParticles.filter(p => p.life > 0);
+  if (level3ExplosionParticles.length === 0) {
+    gameOver = true;
+    document.getElementById('game-over-screen').querySelector('p').textContent = 'Time\'s up! The bricks exploded!';
+    document.getElementById('game-over-screen').classList.add('visible');
+  }
+}
+
+function drawLevel3Timer() {
+  const secs = Math.ceil(level3TimeLeft);
+  ctx.fillStyle = secs <= 10 ? '#ff4444' : '#fff';
+  ctx.font = 'bold 36px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.strokeStyle = '#000';
+  ctx.lineWidth = 3;
+  ctx.strokeText(secs + 's', GAME_WIDTH / 2, 35);
+  ctx.fillText(secs + 's', GAME_WIDTH / 2, 35);
+  ctx.textAlign = 'left';
+}
+
+function drawLevel3Explosion() {
+  ctx.fillStyle = 'rgba(0,0,0,0.3)';
+  ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+  level3ExplosionParticles.forEach(p => {
+    ctx.fillStyle = p.color;
+    ctx.globalAlpha = p.life;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+}
+
+function updateEggSplats() {
+  for (let i = eggSplats.length - 1; i >= 0; i--) {
+    const s = eggSplats[i];
+    s.x += s.vx;
+    s.y += s.vy;
+    s.life -= 0.05;
+    if (s.life <= 0) eggSplats.splice(i, 1);
+  }
+}
+
 // Draw platforms
 function drawPlatforms() {
   platforms.forEach((p) => {
@@ -489,9 +760,9 @@ function drawChicken() {
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  // Head - rotated up when looking up
+  // Head - rotated up when looking up (or in level 3 where we always fire upward)
   ctx.save();
-  if (chicken.lookingUp) {
+  if (chicken.lookingUp || gameState === STATE.LEVEL_3) {
     ctx.translate(20, 12);
     ctx.rotate(-Math.PI / 2);  // -90° to face up
     ctx.translate(-20, -12);
@@ -739,8 +1010,16 @@ function updateBossExplosion() {
   boss.explosionParticles = boss.explosionParticles.filter(p => p.life > 0);
   boss.explosionTimer++;
   if (boss.explosionTimer > 90) {
-    document.getElementById('you-won-screen').classList.add('visible');
-    gameState = STATE.YOU_WON;
+    document.getElementById('level-complete-screen').querySelector('h2').textContent = 'Boss Defeated!';
+    document.getElementById('level-complete-screen').querySelector('p').textContent = 'Entering Breakout...';
+    document.getElementById('level-complete-screen').classList.add('visible');
+    setTimeout(() => {
+      document.getElementById('level-complete-screen').classList.remove('visible');
+      document.getElementById('level-complete-screen').querySelector('h2').textContent = 'Level Complete!';
+      document.getElementById('level-complete-screen').querySelector('p').textContent = 'Entering the Disco...';
+      startLevel3();
+    }, 1500);
+    boss.explosionTimer = -999;
   }
 }
 
@@ -836,20 +1115,33 @@ function updateChicken() {
 
   chicken.lookingUp = keys['KeyE'] || false;
 
-  if (keys['KeyJ'] || keys['ControlLeft']) {
+  if (gameState === STATE.LEVEL_3) {
+    if (keys['KeyJ'] || keys['ControlLeft']) {
+      level3FireCooldown--;
+      if (level3FireCooldown <= 0) {
+        level3FireCooldown = 60 / LEVEL_3_FIRE_RATE;
+        eggs.push({
+          x: chicken.x + chicken.width / 2 - EGG_SIZE,
+          y: chicken.y + 5 - EGG_SIZE,
+          vx: 0,
+          vy: -EGG_SPEED
+        });
+      }
+    } else {
+      level3FireCooldown = 0;
+    }
+  } else if (keys['KeyJ'] || keys['ControlLeft']) {
     if (!chicken.justShot) {
-      const angle45 = Math.PI / 4;
-      const speed45 = EGG_SPEED * 0.707;
       let vx, vy;
       if (chicken.lookingUp) {
-        vx = (chicken.facingRight ? 1 : -1) * speed45;
-        vy = -speed45;
+        vx = 0;
+        vy = -EGG_SPEED;
       } else {
         vx = chicken.facingRight ? EGG_SPEED : -EGG_SPEED;
         vy = 0;
       }
       eggs.push({
-        x: chicken.facingRight ? chicken.x + chicken.width : chicken.x - EGG_SIZE,
+        x: chicken.lookingUp ? chicken.x + chicken.width / 2 - EGG_SIZE : (chicken.facingRight ? chicken.x + chicken.width : chicken.x - EGG_SIZE),
         y: chicken.y + (chicken.lookingUp ? 5 : chicken.height / 2) - EGG_SIZE,
         vx, vy
       });
@@ -890,6 +1182,24 @@ function updateChicken() {
         }
       }
     });
+  }
+
+  // Spaceship collision (level 3)
+  if (gameState === STATE.LEVEL_3 && !chicken.invincible && !gameOver && !level3Exploding) {
+    for (let ss = spaceships.length - 1; ss >= 0; ss--) {
+      if (rectOverlap(chicken, spaceships[ss], 3)) {
+        health--;
+        chicken.invincible = true;
+        chicken.invincibleTimer = 90;
+        updateHealthDisplay();
+        spaceships.splice(ss, 1);
+        if (health <= 0) {
+          gameOver = true;
+          document.getElementById('game-over-screen').classList.add('visible');
+        }
+        break;
+      }
+    }
   }
 
   // Mace collision (level 2) - only the end of the mace hurts, works in any player state
@@ -961,6 +1271,67 @@ function updateEggs() {
         }
       }
     }
+
+    if (gameState === STATE.LEVEL_3) {
+      const eggRect = { x: egg.x - EGG_SIZE, y: egg.y - EGG_SIZE, width: EGG_SIZE * 2, height: EGG_SIZE * 2.4 };
+      let hit = false;
+      for (let b = bricks.length - 1; b >= 0 && !hit; b--) {
+        if (rectOverlap(eggRect, bricks[b])) {
+          const hitBrick = bricks[b];
+          const centerX = hitBrick.x + hitBrick.width / 2;
+          const centerY = hitBrick.y + hitBrick.height / 2;
+          if (hitBrick.explosive) {
+            for (let j = bricks.length - 1; j >= 0; j--) {
+              const other = bricks[j];
+              const otherCenterX = other.x + other.width / 2;
+              const otherCenterY = other.y + other.height / 2;
+              const dist = Math.hypot(centerX - otherCenterX, centerY - otherCenterY);
+              if (dist <= EXPLOSIVE_BRICK_RADIUS) {
+                triggerEnemyExplosion(otherCenterX, otherCenterY);
+                bricks.splice(j, 1);
+              }
+            }
+          } else {
+            bricks.splice(b, 1);
+          }
+          eggs.splice(i, 1);
+          hit = true;
+        }
+      }
+      if (!hit) {
+        for (let ss = spaceships.length - 1; ss >= 0 && !hit; ss--) {
+          if (rectOverlap(eggRect, spaceships[ss])) {
+            triggerEnemyExplosion(spaceships[ss].x + spaceships[ss].width / 2, spaceships[ss].y + spaceships[ss].height / 2);
+            spaceships.splice(ss, 1);
+            eggs.splice(i, 1);
+            hit = true;
+          }
+        }
+      }
+      if (!hit) {
+        for (const s of shields) {
+          if (rectOverlap(eggRect, s)) {
+            triggerEggSplat(egg.x + EGG_SIZE, egg.y + EGG_SIZE);
+            eggs.splice(i, 1);
+            hit = true;
+            break;
+          }
+        }
+      }
+    }
+  }
+}
+
+function triggerEggSplat(x, y) {
+  for (let i = 0; i < 12; i++) {
+    eggSplats.push({
+      x: x + (Math.random() - 0.5) * 20,
+      y: y + (Math.random() - 0.5) * 20,
+      vx: (Math.random() - 0.5) * 4,
+      vy: (Math.random() - 0.5) * 4,
+      life: 1,
+      size: 3 + Math.random() * 5
+    });
   }
 }
 
@@ -1103,6 +1474,16 @@ function checkLevel1Complete() {
   }
 }
 
+let level3Transitioning = false;
+function checkLevel3Complete() {
+  if (level3Transitioning) return;
+  if (bricks.length === 0) {
+    level3Transitioning = true;
+    document.getElementById('you-won-screen').classList.add('visible');
+    gameState = STATE.YOU_WON;
+  }
+}
+
 function gameLoop() {
   if (gameState === STATE.MENU) {
     drawMenu();
@@ -1139,6 +1520,37 @@ function gameLoop() {
     eggs.forEach(drawEgg);
     drawBoss();
     drawChicken();
+  } else if (gameState === STATE.LEVEL_3) {
+    if (!gameOver && !level3Exploding) {
+      updateChicken();
+      updateEggs();
+      updateShields();
+      updateSpaceships();
+      updateEggSplats();
+      level3SpaceshipSpawnTimer++;
+      if (level3SpaceshipSpawnTimer >= 60) {
+        level3SpaceshipSpawnTimer = 0;
+        spawnLevel3Spaceships();
+      }
+      checkLevel3Complete();
+      level3TimeLeft -= 1 / 60;
+      if (level3TimeLeft <= 0 && bricks.length > 0) {
+        level3Exploding = true;
+        triggerLevel3Explosion();
+      }
+    } else if (level3Exploding) {
+      updateLevel3Explosion();
+    }
+    drawBackgroundLevel3();
+    drawPlatforms();
+    drawBricks();
+    drawShields();
+    drawSpaceships();
+    eggs.forEach(drawEgg);
+    drawEggSplats();
+    drawChicken();
+    if (!level3Exploding) drawLevel3Timer();
+    else drawLevel3Explosion();
   }
 
   requestAnimationFrame(gameLoop);
