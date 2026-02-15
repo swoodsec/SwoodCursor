@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Chicken Run - Egg Defender</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="game-container">
+    <!-- Single canvas for menu and game - always visible -->
+    <canvas id="game-canvas" width="1200" height="600"></canvas>
+    <!-- Main Menu overlay (title + button only) -->
+    <div id="main-menu">
+      <div class="menu-content">
+        <h1>Chicken Run</h1>
+        <p class="subtitle">Egg Defender</p>
+        <button id="start-btn">Start Game</button>
+        <a href="#" id="skip-to-level" style="display:block;margin-top:20px;font-size:14px;color:#888;">Skip to Level 1 (debug)</a>
+      </div>
+    </div>
+    <div id="ui-overlay">
+      <div id="health-display">
+        <span class="health-label">Health:</span>
+        <div id="health-eggs"></div>
+      </div>
+      <div id="controls-hint">
+        A/D Move • Space Jump • J/Ctrl Shoot • E Look Up
+      </div>
+    </div>
+    <div id="game-over-screen">
+      <h1>GAME OVER</h1>
+      <p>The chicken has lost all its eggs!</p>
+      <button id="retry-btn">Retry</button>
+    </div>
+    <div id="level-complete-screen">
+      <h2>Level Complete!</h2>
+      <p>Entering the Disco...</p>
+    </div>
+    <div id="you-won-screen">
+      <h1>YOU WON</h1>
+      <p>Victory! The disco boss has been defeated!</p>
+      <button id="menu-btn">Main Menu</button>
+    </div>
+  </div>
+  <script src="game.js"></script>
+</body>
+</html>

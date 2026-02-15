@@ -1,0 +1,279 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: linear-gradient(135deg, #0a0a1a 0%, #1a1a3a 100%);
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+#game-container {
+  position: relative;
+  width: 1200px;
+  height: 600px;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 0 60px rgba(255, 255, 255, 0.1),
+              0 0 120px rgba(138, 43, 226, 0.2);
+}
+
+#game-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1200px;
+  height: 600px;
+  display: block;
+  background: #1a1a2e;
+  z-index: 0;
+}
+
+/* Main Menu - transparent overlay so canvas (menu drawing) shows through */
+#main-menu {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  z-index: 20;
+}
+
+#main-menu.hidden {
+  display: none;
+}
+
+.menu-content {
+  text-align: center;
+  z-index: 1;
+}
+
+.menu-content h1 {
+  font-size: 56px;
+  color: #fff;
+  margin-bottom: 8px;
+  text-shadow: 0 0 30px rgba(255, 200, 100, 0.5);
+}
+
+.menu-content .subtitle {
+  font-size: 24px;
+  color: #ffd93d;
+  margin-bottom: 40px;
+}
+
+#start-btn {
+  padding: 18px 56px;
+  font-size: 24px;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+#start-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 30px rgba(102, 126, 234, 0.5);
+}
+
+/* Level Complete Screen */
+#level-complete-screen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.7);
+  color: #fff;
+  z-index: 15;
+}
+
+#level-complete-screen.visible {
+  display: flex;
+}
+
+#level-complete-screen h2 {
+  font-size: 48px;
+  margin-bottom: 16px;
+  color: #4ade80;
+}
+
+#level-complete-screen p {
+  font-size: 20px;
+  color: #ccc;
+}
+
+/* YOU WON Screen */
+#you-won-screen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.9);
+  color: #fff;
+  z-index: 10;
+}
+
+#you-won-screen.visible {
+  display: flex;
+}
+
+#you-won-screen h1 {
+  font-size: 72px;
+  margin-bottom: 16px;
+  color: #4ade80;
+  text-shadow: 0 0 30px rgba(74, 222, 128, 0.6);
+  letter-spacing: 4px;
+}
+
+#you-won-screen p {
+  font-size: 20px;
+  margin-bottom: 32px;
+  color: #ccc;
+}
+
+#menu-btn {
+  padding: 16px 48px;
+  font-size: 24px;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+#menu-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 30px rgba(102, 126, 234, 0.5);
+}
+
+#ui-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  padding: 16px 24px;
+  pointer-events: none;
+  z-index: 5;
+}
+
+#health-display {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.health-label {
+  color: #fff;
+  font-size: 18px;
+  font-weight: 600;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+#health-eggs {
+  display: flex;
+  gap: 6px;
+}
+
+.health-egg {
+  width: 28px;
+  height: 32px;
+  background: radial-gradient(ellipse at 30% 30%, #fff8e7, #f5e6c8);
+  border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+  box-shadow: inset -2px -2px 4px rgba(0, 0, 0, 0.2),
+              0 2px 4px rgba(0, 0, 0, 0.3);
+  border: 2px solid #e8d4a8;
+}
+
+.health-egg.lost {
+  background: #3a3a3a;
+  border-color: #555;
+  box-shadow: none;
+  opacity: 0.5;
+}
+
+#controls-hint {
+  position: absolute;
+  bottom: 12px;
+  left: 24px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 14px;
+}
+
+#game-over-screen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  z-index: 10;
+}
+
+#game-over-screen.visible {
+  display: flex;
+}
+
+#game-over-screen h1 {
+  font-size: 64px;
+  margin-bottom: 16px;
+  color: #ff6b6b;
+  text-shadow: 0 0 20px rgba(255, 107, 107, 0.5);
+  letter-spacing: 4px;
+}
+
+#game-over-screen p {
+  font-size: 20px;
+  margin-bottom: 32px;
+  color: #ccc;
+}
+
+#retry-btn {
+  padding: 16px 48px;
+  font-size: 24px;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+  pointer-events: auto;
+}
+
+#retry-btn:hover {
+  transform: scale(1.05);
+  box-shadow: 0 0 30px rgba(102, 126, 234, 0.5);
+}
+
+#retry-btn:active {
+  transform: scale(0.98);
+}
