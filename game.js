@@ -24,7 +24,7 @@ const GAME_WIDTH = 1200;
 const GAME_HEIGHT = 600;
 
 // Game states
-const STATE = { MENU: 'menu', LEVEL_1: 'level1', LEVEL_2: 'level2', LEVEL_3: 'level3', GAME_OVER: 'gameover', YOU_WON: 'youwon' };
+const STATE = { MENU: 'menu', LEVEL_1: 'level1', LEVEL_2: 'level2', LEVEL_3: 'level3', LEVEL_4: 'level4', GAME_OVER: 'gameover', YOU_WON: 'youwon' };
 let gameState = STATE.MENU;
 
 // Physics
@@ -79,6 +79,35 @@ const platformsLevel2 = [
 const platformsLevel3 = [
   { x: 0, y: 520, width: GAME_WIDTH, height: 80 }
 ];
+
+// Level 4 - Side-scrolling shooter (biplane in space)
+const BIPLANE_SPEED = 5;
+const BIPLANE_WIDTH = 60;
+const BIPLANE_HEIGHT = 35;
+const LEVEL_4_EGG_SIZE = 5;
+const LEVEL_4_EGG_SPEED = 14;
+const LEVEL_4_FIRE_RATE = 12;
+const LEVEL_4_BOMB_RADIUS = 100;
+const RAIL_DAMAGE = 2;
+let level4Stars = [];
+let level4Comets = [];
+let level4BgOffset = 0;
+let level4Enemies = [];
+let level4Projectiles = [];
+let level4Bombs = [];
+let level4BombActive = false;
+let level4Shield = null;
+let level4ShieldTimer = 0;
+let level4Phase = 0;
+let level4LandersKilled = 0;
+let level4BeetlesKilled = 0;
+let level4AstronautKilled = false;
+let level4AstronautSpawned = false;
+let level4MedCrosses = [];
+let level4AstronautExploding = false;
+let level4AstronautExplosionParticles = [];
+let level4SpawnTimer = 0;
+let level4FireCooldown = 0;
 
 // Level 3 - bricks and shields
 const bricks = [];
@@ -209,6 +238,48 @@ function initEnemies() {
   }
 }
 
+function triggerAstronautExplosion() {
+  level4AstronautExploding = true;
+  level4AstronautExplosionParticles = [];
+  for (let i = 0; i < 400; i++) {
+    level4AstronautExplosionParticles.push({
+      x: Math.random() * GAME_WIDTH,
+      y: Math.random() * GAME_HEIGHT,
+      vx: (Math.random() - 0.5) * 20,
+      vy: (Math.random() - 0.5) * 20,
+      size: 15 + Math.random() * 40,
+      life: 1,
+      color: ['#4488ff', '#66aaff', '#2288dd', '#aaddff', '#3377cc'][Math.floor(Math.random() * 5)]
+    });
+  }
+}
+
+function updateAstronautExplosion() {
+  level4AstronautExplosionParticles.forEach(p => {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life -= 0.012;
+  });
+  level4AstronautExplosionParticles = level4AstronautExplosionParticles.filter(p => p.life > 0);
+  if (level4AstronautExplosionParticles.length === 0) {
+    document.getElementById('you-won-screen').classList.add('visible');
+    gameState = STATE.YOU_WON;
+  }
+}
+
+function drawAstronautExplosion() {
+  ctx.fillStyle = 'rgba(0, 50, 100, 0.3)';
+  ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+  level4AstronautExplosionParticles.forEach(p => {
+    ctx.fillStyle = p.color;
+    ctx.globalAlpha = p.life;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+}
+
 function triggerEnemyExplosion(x, y) {
   for (let i = 0; i < 25; i++) {
     enemyExplosions.push({
@@ -299,7 +370,7 @@ function initShields() {
 }
 
 // Game state
-let health = 5;
+let health = 5.0;
 let gameOver = false;
 let keys = {};
 let menuDanceOffset = 0;
@@ -320,6 +391,7 @@ document.getElementById('retry-btn').addEventListener('click', () => {
   if (gameState === STATE.LEVEL_1) startLevel1();
   else if (gameState === STATE.LEVEL_2) startLevel2();
   else if (gameState === STATE.LEVEL_3) startLevel3();
+  else if (gameState === STATE.LEVEL_4) startLevel4();
 });
 
 function startLevel1() {
@@ -349,6 +421,92 @@ function startLevel3() {
   document.getElementById('ui-overlay').style.display = 'block';
 }
 
+function initLevel4() {
+  chicken.x = 150;
+  chicken.y = GAME_HEIGHT / 2 - BIPLANE_HEIGHT / 2;
+  chicken.vx = 0;
+  chicken.vy = 0;
+  eggs.length = 0;
+  level4Stars = [];
+  level4Comets = [];
+  level4BgOffset = 0;
+  level4Enemies = [];
+  level4Projectiles = [];
+  enemyExplosions.length = 0;
+  level4Bombs = [];
+  level4BombActive = false;
+  level4Shield = null;
+  level4ShieldTimer = 0;
+  level4Phase = 0;
+  level4LandersKilled = 0;
+  level4BeetlesKilled = 0;
+  level4AstronautKilled = false;
+  level4AstronautSpawned = false;
+  level4AstronautExploding = false;
+  level4AstronautExplosionParticles = [];
+  level4MedCrosses = [];
+  level4SpawnTimer = 0;
+  level4FireCooldown = 0;
+  for (let i = 0; i < 80; i++) {
+    level4Stars.push({
+      x: Math.random() * GAME_WIDTH * 2,
+      y: Math.random() * GAME_HEIGHT,
+      size: 1 + Math.random() * 2,
+      speed: 2 + Math.random() * 4,
+      brightness: 0.5 + Math.random() * 0.5
+    });
+  }
+  for (let i = 0; i < 8; i++) {
+    level4Comets.push({
+      x: GAME_WIDTH + Math.random() * 400,
+      y: Math.random() * GAME_HEIGHT,
+      length: 30 + Math.random() * 40,
+      speed: 8 + Math.random() * 6,
+      angle: Math.PI * 0.95 + Math.random() * 0.1
+    });
+  }
+  spawnLevel4Bombs();
+  level4Shield = {
+    x: 300 + Math.random() * (GAME_WIDTH - 500),
+    y: 80 + Math.random() * (GAME_HEIGHT - 160),
+    width: 24,
+    height: 28,
+    collected: false
+  };
+  level4MedCrosses = [
+    { x: GAME_WIDTH + 100 + Math.random() * 200, y: 80 + Math.random() * (GAME_HEIGHT - 160), width: 28, height: 28, vx: -3 },
+    { x: GAME_WIDTH + 400 + Math.random() * 300, y: 80 + Math.random() * (GAME_HEIGHT - 160), width: 28, height: 28, vx: -3 }
+  ];
+}
+
+function spawnLevel4Bombs() {
+  level4Bombs.length = 0;
+  const used = new Set();
+  for (let i = 0; i < 3; i++) {
+    let x, y;
+    let attempts = 0;
+    do {
+      x = 400 + Math.random() * (GAME_WIDTH - 500);
+      y = 80 + Math.random() * (GAME_HEIGHT - 160);
+      attempts++;
+    } while (attempts < 20);
+    level4Bombs.push({
+      x, y,
+      width: 20,
+      height: 24,
+      collected: false
+    });
+  }
+}
+
+function startLevel4() {
+  gameState = STATE.LEVEL_4;
+  platforms = platformsLevel3;
+  resetGame();
+  initLevel4();
+  document.getElementById('ui-overlay').style.display = 'block';
+}
+
 function resetGame() {
   chicken.x = 100;
   chicken.y = 400;
@@ -363,7 +521,7 @@ function resetGame() {
   chicken.invincibleTimer = 0;
 
   eggs.length = 0;
-  health = 5;
+  health = 5.0;
   gameOver = false;
 
   document.getElementById('game-over-screen').classList.remove('visible');
@@ -376,7 +534,7 @@ function updateHealthDisplay() {
   container.innerHTML = '';
   for (let i = 0; i < 5; i++) {
     const egg = document.createElement('div');
-    egg.className = 'health-egg' + (i >= health ? ' lost' : '');
+    egg.className = 'health-egg' + (health < i + 1 ? ' lost' : '');
     container.appendChild(egg);
   }
 }
@@ -556,6 +714,250 @@ function drawBackgroundLevel2() {
   // Floor
   ctx.fillStyle = '#2a1a3a';
   ctx.fillRect(0, 500, GAME_WIDTH, GAME_HEIGHT);
+}
+
+// ========== LEVEL 4 - Side-scrolling shooter ==========
+function drawBackgroundLevel4() {
+  const gradient = ctx.createLinearGradient(0, 0, 0, GAME_HEIGHT);
+  gradient.addColorStop(0, '#0a0a1a');
+  gradient.addColorStop(0.3, '#0d0d2e');
+  gradient.addColorStop(0.7, '#151530');
+  gradient.addColorStop(1, '#080818');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+  level4Stars.forEach(s => {
+    ctx.globalAlpha = s.brightness * (0.7 + 0.3 * Math.sin(Date.now() / 200 + s.x));
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.size, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+  level4Comets.forEach(c => {
+    ctx.strokeStyle = `rgba(30, 35, 55, ${0.25 + 0.15 * Math.sin(Date.now() / 100)})`;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    const tailX = c.x - Math.cos(c.angle) * c.length;
+    const tailY = c.y - Math.sin(c.angle) * c.length;
+    ctx.moveTo(tailX, tailY);
+    ctx.lineTo(c.x, c.y);
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(40, 45, 65, 0.4)';
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, 3, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+function drawBiplane() {
+  const bx = chicken.x;
+  const by = chicken.y;
+  const cx = bx + BIPLANE_WIDTH / 2;
+  const cy = by + BIPLANE_HEIGHT / 2;
+
+  // Top-down retro airplane: fuselage center, wings protruding sides
+  // Wings (red) - extend from top and bottom
+  ctx.fillStyle = '#cc3333';
+  ctx.fillRect(bx + 8, by + 2, 44, 8);
+  ctx.fillRect(bx + 8, by + BIPLANE_HEIGHT - 10, 44, 8);
+  ctx.strokeStyle = '#991111';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(bx + 8, by + 2, 44, 8);
+  ctx.strokeRect(bx + 8, by + BIPLANE_HEIGHT - 10, 44, 8);
+
+  // Fuselage (white) - elongated body
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, 18, 8, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#dddddd';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Nose (red) - pointed front
+  ctx.fillStyle = '#cc3333';
+  ctx.beginPath();
+  ctx.moveTo(bx + BIPLANE_WIDTH - 4, cy);
+  ctx.lineTo(bx + BIPLANE_WIDTH + 6, cy - 6);
+  ctx.lineTo(bx + BIPLANE_WIDTH + 6, cy + 6);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#991111';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Tail (red)
+  ctx.fillStyle = '#cc3333';
+  ctx.beginPath();
+  ctx.ellipse(bx + 6, cy, 6, 6, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#991111';
+  ctx.stroke();
+
+  // Cockpit (white circle)
+  ctx.fillStyle = '#e8f4fc';
+  ctx.beginPath();
+  ctx.arc(cx - 2, cy, 5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#aaa';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  if (chicken.hasTopHat) {
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(cx - 4, cy - 8, 8, 5);
+  }
+}
+
+function drawLevel4Enemies() {
+  level4Enemies.forEach(e => {
+    if (e.type === 'lander') {
+      ctx.fillStyle = '#888';
+      ctx.fillRect(e.x + 5, e.y + 10, 30, 25);
+      ctx.fillStyle = '#aaa';
+      ctx.fillRect(e.x + 10, e.y + 15, 20, 15);
+      ctx.fillStyle = '#666';
+      ctx.beginPath();
+      ctx.moveTo(e.x + 15, e.y + 5);
+      ctx.lineTo(e.x + 25, e.y + 5);
+      ctx.lineTo(e.x + 20, e.y);
+      ctx.closePath();
+      ctx.fill();
+      ctx.fillStyle = '#ff4444';
+      ctx.beginPath();
+      ctx.arc(e.x + 20, e.y + 35, 4, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (e.type === 'beetle') {
+      ctx.fillStyle = '#ffdd00';
+      ctx.beginPath();
+      ctx.ellipse(e.x + e.width / 2, e.y + e.height / 2, e.width / 2 - 2, e.height / 2 - 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#ccaa00';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = '#333';
+      ctx.beginPath();
+      ctx.arc(e.x + 8, e.y + 6, 4, 0, Math.PI * 2);
+      ctx.arc(e.x + 20, e.y + 10, 3, 0, Math.PI * 2);
+      ctx.arc(e.x + 27, e.y + 6, 4, 0, Math.PI * 2);
+      ctx.arc(e.x + 12, e.y + 20, 3, 0, Math.PI * 2);
+      ctx.arc(e.x + 24, e.y + 20, 3, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (e.type === 'astronaut') {
+      const acx = e.x + e.width / 2;
+      const acy = e.y + e.height / 2;
+      const shieldRadius = 100;
+      const rot = (e.shieldRotation || 0) % (Math.PI * 2);
+      const cutoutAngle = Math.PI / 3;
+      ctx.fillStyle = 'rgba(80, 120, 200, 0.6)';
+      ctx.strokeStyle = 'rgba(100, 150, 255, 0.9)';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.arc(acx, acy, shieldRadius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = 'rgba(0,0,0,1)';
+      ctx.beginPath();
+      ctx.moveTo(acx, acy);
+      ctx.arc(acx, acy, shieldRadius + 2, rot, rot + cutoutAngle);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(acx, acy);
+      ctx.arc(acx, acy, shieldRadius + 2, rot + Math.PI, rot + Math.PI + cutoutAngle);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = '#333';
+      ctx.fillRect(e.x + 20, e.y - 20, 110, 12);
+      ctx.fillStyle = '#ff0000';
+      ctx.fillRect(e.x + 22, e.y - 18, (106 * e.health) / e.maxHealth, 8);
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(e.x + 30, e.y + 60, 90, 135);
+      ctx.fillStyle = '#333';
+      ctx.fillRect(e.x + 45, e.y + 90, 60, 90);
+      ctx.fillStyle = '#1a1a1a';
+      ctx.beginPath();
+      ctx.arc(e.x + 75, e.y + 45, 36, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#444';
+      ctx.fillRect(e.x + 105, e.y + 105, 45, 24);
+      ctx.fillStyle = '#ffcc00';
+      ctx.fillRect(e.x + 144, e.y + 108, 24, 18);
+    }
+  });
+}
+
+function drawLevel4Projectiles() {
+  level4Projectiles.forEach(p => {
+    ctx.fillStyle = p.color;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+    ctx.fill();
+  });
+}
+
+function drawLevel4ShieldItem() {
+  if (!level4Shield || level4Shield.collected) return;
+  const s = level4Shield;
+  ctx.fillStyle = '#4488ff';
+  ctx.strokeStyle = '#2266cc';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(s.x + s.width / 2, s.y + s.height / 2, s.width / 2 + 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#66aaff';
+  ctx.beginPath();
+  ctx.arc(s.x + s.width / 2, s.y + s.height / 2, s.width / 4, 0, Math.PI * 2);
+  ctx.fill();
+}
+
+function drawLevel4ShieldEffect() {
+  if (level4ShieldTimer <= 0) return;
+  const cx = chicken.x + BIPLANE_WIDTH / 2;
+  const cy = chicken.y + BIPLANE_HEIGHT / 2;
+  const pulse = 0.7 + 0.3 * Math.sin(Date.now() / 80);
+  ctx.strokeStyle = `rgba(68, 136, 255, ${0.5 * pulse})`;
+  ctx.lineWidth = 4;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 50, 0, Math.PI * 2);
+  ctx.stroke();
+  ctx.strokeStyle = `rgba(100, 160, 255, ${0.3 * pulse})`;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.arc(cx, cy, 55, 0, Math.PI * 2);
+  ctx.stroke();
+}
+
+function drawLevel4MedCrosses() {
+  level4MedCrosses.forEach(m => {
+    if (m.x < -50) return;
+    const cx = m.x + m.width / 2;
+    const cy = m.y + m.height / 2;
+    const s = 10;
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#cc3333';
+    ctx.lineWidth = 3;
+    ctx.fillRect(cx - s / 2, cy - s * 1.2, s, s * 2.4);
+    ctx.fillRect(cx - s * 1.2, cy - s / 2, s * 2.4, s);
+    ctx.strokeRect(cx - s / 2, cy - s * 1.2, s, s * 2.4);
+    ctx.strokeRect(cx - s * 1.2, cy - s / 2, s * 2.4, s);
+  });
+}
+
+function drawLevel4Bombs() {
+  level4Bombs.forEach(b => {
+    if (b.collected) return;
+    ctx.fillStyle = '#ff4444';
+    ctx.beginPath();
+    ctx.ellipse(b.x + b.width / 2, b.y + b.height / 2, b.width / 2 - 2, b.height / 2 - 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#aa0000';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  });
 }
 
 // ========== LEVEL 3 - Super Breakout ==========
@@ -866,11 +1268,12 @@ function drawChicken() {
 }
 
 function drawEgg(egg) {
-  ctx.fillStyle = '#fff8e7';
+  const size = egg.level4 ? LEVEL_4_EGG_SIZE : EGG_SIZE;
+  ctx.fillStyle = egg.bomb ? '#ff8888' : '#fff8e7';
   ctx.beginPath();
-  ctx.ellipse(egg.x, egg.y, EGG_SIZE, EGG_SIZE * 1.2, 0, 0, Math.PI * 2);
+  ctx.ellipse(egg.x, egg.y, size, size * 1.2, 0, 0, Math.PI * 2);
   ctx.fill();
-  ctx.strokeStyle = '#e8d4a8';
+  ctx.strokeStyle = egg.bomb ? '#cc4444' : '#e8d4a8';
   ctx.lineWidth = 1;
   ctx.stroke();
 }
@@ -1019,6 +1422,20 @@ function drawBoss() {
   ctx.arc(b.x + 60, b.y + 55, 15, 0, Math.PI * 2);
   ctx.fill();
 
+  // Green vulnerable zone on forehead
+  const headSpot = getBossHeadSpotRect();
+  const headGlow = 0.5 + 0.5 * Math.sin(Date.now() / 120);
+  ctx.shadowColor = '#00ff00';
+  ctx.shadowBlur = 8 + headGlow * 6;
+  ctx.fillStyle = '#33ff33';
+  ctx.fillRect(headSpot.x, headSpot.y, headSpot.width, headSpot.height);
+  ctx.fillStyle = '#66ff66';
+  ctx.fillRect(headSpot.x + 4, headSpot.y + 4, headSpot.width - 8, headSpot.height - 8);
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = '#00aa00';
+  ctx.lineWidth = 2;
+  ctx.strokeRect(headSpot.x, headSpot.y, headSpot.width, headSpot.height);
+
   // Medieval mace - on side closest to player
   const { maceCenterX, maceCenterY, maceEndX, maceEndY } = getMacePositions();
 
@@ -1051,7 +1468,7 @@ function drawBoss() {
   ctx.lineWidth = 2;
   ctx.strokeRect(toeX, toeY, toeW, toeH);
 
-  // Toe shield - covers weak spot unless boss is moving AND mace is at top of swing
+  // Toe shield - covers weak spot unless opened by shooting head spot (2 sec)
   if (!isToeExposed()) {
     const shieldX = toeX - 8;
     const shieldY = toeY - 5;
@@ -1139,7 +1556,17 @@ function getBossToeRect() {
   };
 }
 
-// Toe is exposed when toeExposedTimer > 0. Timer set to ~0.5 sec when mace at top + boss moving.
+function getBossHeadSpotRect() {
+  const b = boss;
+  return {
+    x: b.x + b.width / 2 - 14,
+    y: b.y + 28,
+    width: 28,
+    height: 24
+  };
+}
+
+// Toe is exposed when toeExposedTimer > 0. Timer set to 2 sec when head spot is shot.
 function isToeExposed() {
   return (boss.toeExposedTimer || 0) > 0;
 }
@@ -1170,7 +1597,306 @@ function circleRectOverlap(cx, cy, radius, rect) {
   return (distX * distX + distY * distY) <= (radius * radius);
 }
 
+// ========== LEVEL 4 - Side-scrolling shooter ==========
+function updateBiplane() {
+  chicken.vx = 0;
+  chicken.vy = 0;
+  if (keys['KeyA'] || keys['ArrowLeft']) chicken.vx = -BIPLANE_SPEED;
+  if (keys['KeyD'] || keys['ArrowRight']) chicken.vx = BIPLANE_SPEED;
+  if (keys['KeyW'] || keys['ArrowUp']) chicken.vy = -BIPLANE_SPEED;
+  if (keys['KeyS'] || keys['ArrowDown']) chicken.vy = BIPLANE_SPEED;
+  chicken.x += chicken.vx;
+  chicken.y += chicken.vy;
+  chicken.x = Math.max(20, Math.min(GAME_WIDTH - BIPLANE_WIDTH - 20, chicken.x));
+  chicken.y = Math.max(20, Math.min(GAME_HEIGHT - BIPLANE_HEIGHT - 20, chicken.y));
+
+  level4BgOffset += 8;
+  level4Stars.forEach(s => {
+    s.x -= s.speed;
+    if (s.x < -10) s.x = GAME_WIDTH + Math.random() * 200;
+  });
+  level4Comets.forEach(c => {
+    c.x -= c.speed;
+    if (c.x < -100) {
+      c.x = GAME_WIDTH + Math.random() * 300;
+      c.y = Math.random() * GAME_HEIGHT;
+    }
+  });
+
+  if (keys['KeyJ'] || keys['ControlLeft']) {
+    level4FireCooldown--;
+    if (level4FireCooldown <= 0) {
+      level4FireCooldown = 60 / LEVEL_4_FIRE_RATE;
+      const ly = chicken.y + 8;
+      const ry = chicken.y + BIPLANE_HEIGHT - 13;
+      const ex = chicken.x + BIPLANE_WIDTH;
+      eggs.push({
+        x: ex, y: ly - LEVEL_4_EGG_SIZE,
+        vx: LEVEL_4_EGG_SPEED, vy: 0,
+        level4: true, bomb: level4BombActive
+      });
+      eggs.push({
+        x: ex, y: ry - LEVEL_4_EGG_SIZE,
+        vx: LEVEL_4_EGG_SPEED, vy: 0,
+        level4: true, bomb: level4BombActive
+      });
+      if (level4BombActive) level4BombActive = false;
+    }
+  } else level4FireCooldown = 0;
+
+  level4MedCrosses.forEach(m => {
+    m.x += m.vx;
+    if (m.x < -40) {
+      m.x = GAME_WIDTH + 50 + Math.random() * 150;
+      m.y = 80 + Math.random() * (GAME_HEIGHT - 160);
+    }
+    if (rectOverlap(
+      { x: chicken.x, y: chicken.y, width: BIPLANE_WIDTH, height: BIPLANE_HEIGHT },
+      m, 5)) {
+      m.x = GAME_WIDTH + 50 + Math.random() * 150;
+      m.y = 80 + Math.random() * (GAME_HEIGHT - 160);
+      health = 5.0;
+      updateHealthDisplay();
+    }
+  });
+  level4Bombs.forEach(b => {
+    if (!b.collected && rectOverlap(
+      { x: chicken.x, y: chicken.y, width: BIPLANE_WIDTH, height: BIPLANE_HEIGHT },
+      b, 5)) {
+      b.collected = true;
+      level4BombActive = true;
+    }
+  });
+
+  if (level4Shield && !level4Shield.collected && rectOverlap(
+    { x: chicken.x, y: chicken.y, width: BIPLANE_WIDTH, height: BIPLANE_HEIGHT },
+    level4Shield, 5)) {
+    level4Shield.collected = true;
+    level4ShieldTimer = 600;
+  }
+
+  if (level4ShieldTimer > 0) {
+    level4ShieldTimer--;
+    chicken.invincible = true;
+    chicken.invincibleTimer = level4ShieldTimer;
+  } else if (chicken.invincible) {
+    chicken.invincibleTimer--;
+    if (chicken.invincibleTimer <= 0) chicken.invincible = false;
+  }
+}
+
+function spawnLevel4Enemy(side, type, extra) {
+  const sides = ['right', 'left', 'top', 'bottom'];
+  const s = side || sides[Math.floor(Math.random() * sides.length)];
+  let x, y, vx, vy;
+  if (s === 'right') {
+    x = GAME_WIDTH + 50 + (extra || 0);
+    y = 100 + Math.random() * (GAME_HEIGHT - 200);
+    vx = -1.5;
+    vy = 0;
+  } else if (s === 'left') {
+    x = -80 - (extra || 0);
+    y = 100 + Math.random() * (GAME_HEIGHT - 200);
+    vx = 1.5;
+    vy = 0;
+  } else if (s === 'top') {
+    x = 100 + Math.random() * (GAME_WIDTH - 200);
+    y = -80 - (extra || 0);
+    vx = (Math.random() - 0.5) * 0.8;
+    vy = 1.5;
+  } else {
+    x = 100 + Math.random() * (GAME_WIDTH - 200);
+    y = GAME_HEIGHT + 80 + (extra || 0);
+    vx = (Math.random() - 0.5) * 0.8;
+    vy = -1.5;
+  }
+  return { x, y, vx, vy };
+}
+
+const LEVEL_4_LANDERS_REQUIRED = 50;
+const LEVEL_4_BEETLES_REQUIRED = 50;
+const LEVEL_4_SPAWN_INTERVAL = 8;
+const LEVEL_4_BEETLE_SPAWN_INTERVAL = 4;
+
+function isLevel4EnemyVisible(enemy) {
+  return enemy.x + enemy.width > 0 && enemy.x < GAME_WIDTH &&
+         enemy.y + enemy.height > 0 && enemy.y < GAME_HEIGHT;
+}
+
+function isEggHitThroughAstronautShieldCutout(egg, enemy) {
+  const acx = enemy.x + enemy.width / 2;
+  const acy = enemy.y + enemy.height / 2;
+  const ecx = egg.x + (egg.level4 ? LEVEL_4_EGG_SIZE : EGG_SIZE);
+  const ecy = egg.y + (egg.level4 ? LEVEL_4_EGG_SIZE : EGG_SIZE) * 1.2;
+  let angle = Math.atan2(ecy - acy, ecx - acx);
+  if (angle < 0) angle += Math.PI * 2;
+  const wrap = (a) => ((a % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2);
+  angle = wrap(angle);
+  const rot = wrap(enemy.shieldRotation || 0);
+  const c1s = rot, c1e = wrap(rot + Math.PI / 3);
+  const c2s = wrap(rot + Math.PI), c2e = wrap(rot + Math.PI + Math.PI / 3);
+  const inCutout1 = c1s < c1e ? (angle >= c1s && angle < c1e) : (angle >= c1s || angle < c1e);
+  const inCutout2 = c2s < c2e ? (angle >= c2s && angle < c2e) : (angle >= c2s || angle < c2e);
+  return inCutout1 || inCutout2;
+}
+
+function spawnLevel4EnemyBatch() {
+  if (level4Phase === 0 && level4LandersKilled < LEVEL_4_LANDERS_REQUIRED) {
+    for (let k = 0; k < 3; k++) {
+      const pos = spawnLevel4Enemy(null, 'lander', Math.random() * 80);
+      level4Enemies.push({
+      type: 'lander',
+      x: pos.x,
+      y: pos.y,
+      width: 40,
+      height: 45,
+      health: 2,
+      maxHealth: 2,
+      vx: pos.vx,
+      vy: pos.vy,
+      shootTimer: Math.floor(Math.random() * 40),
+      fragmentColors: ['#ff4444', '#44ff44', '#4444ff', '#ffff44', '#ff44ff']
+    });
+    }
+  } else if (level4Phase === 1 && level4BeetlesKilled < LEVEL_4_BEETLES_REQUIRED) {
+    for (let k = 0; k < 5; k++) {
+      const pos = spawnLevel4Enemy(null, 'beetle', Math.random() * 80);
+      level4Enemies.push({
+      type: 'beetle',
+      x: pos.x,
+      y: pos.y,
+      width: 35,
+      height: 28,
+      health: 4,
+      maxHealth: 4,
+      vx: pos.vx,
+      vy: pos.vy,
+      shootTimer: Math.floor(Math.random() * 50)
+    });
+    }
+  } else if (level4Phase === 2 && !level4AstronautSpawned) {
+    level4AstronautSpawned = true;
+    level4Enemies.push({
+      type: 'astronaut',
+      x: GAME_WIDTH + 80,
+      y: GAME_HEIGHT / 2 - 120,
+      width: 150,
+      height: 240,
+      health: 60,
+      maxHealth: 60,
+      vx: -2,
+      vy: 0,
+      shootTimer: 8,
+      shieldRotation: 0
+    });
+  }
+}
+
+function updateLevel4Enemies() {
+  if (level4Phase === 0 && level4LandersKilled >= LEVEL_4_LANDERS_REQUIRED && level4Enemies.length === 0) {
+    level4Phase = 1;
+  } else if (level4Phase === 1 && level4BeetlesKilled >= LEVEL_4_BEETLES_REQUIRED && level4Enemies.length === 0) {
+    level4Phase = 2;
+  }
+  level4SpawnTimer--;
+  const spawnInterval = level4Phase === 1 ? LEVEL_4_BEETLE_SPAWN_INTERVAL : LEVEL_4_SPAWN_INTERVAL;
+  if (level4SpawnTimer <= 0) {
+    level4SpawnTimer = spawnInterval;
+    spawnLevel4EnemyBatch();
+  }
+  for (let i = level4Enemies.length - 1; i >= 0; i--) {
+    const e = level4Enemies[i];
+    e.x += e.vx || 0;
+    e.y += e.vy || 0;
+    if (e.type === 'astronaut') {
+      e.shieldRotation = (e.shieldRotation || 0) + 0.04;
+      e.x = Math.max(e.x, GAME_WIDTH / 2);
+      e.y = Math.max(0, Math.min(GAME_HEIGHT - e.height, e.y));
+    }
+    e.shootTimer--;
+    if (e.type === 'lander' && e.shootTimer <= 0) {
+      e.shootTimer = 60 + Math.floor(Math.random() * 40);
+      for (let j = 0; j < 8; j++) {
+        const a = (j / 8) * Math.PI * 2 + Math.random() * 0.3;
+        level4Projectiles.push({
+          x: e.x + e.width / 2,
+          y: e.y + e.height / 2,
+          vx: Math.cos(a) * 3,
+          vy: Math.sin(a) * 3,
+          radius: 6,
+          color: e.fragmentColors[j % e.fragmentColors.length],
+          enemy: true,
+          damage: 0.25
+        });
+      }
+    }
+    if (e.type === 'beetle' && e.shootTimer <= 0) {
+      e.shootTimer = 25 + Math.floor(Math.random() * 25);
+      const a = Math.random() * Math.PI * 2;
+      level4Projectiles.push({
+        x: e.x + e.width / 2,
+        y: e.y + e.height / 2,
+        vx: Math.cos(a) * 4,
+        vy: Math.sin(a) * 4,
+        radius: 8,
+        color: '#4488ff',
+        enemy: true,
+        damage: 0.25
+      });
+    }
+    if (e.type === 'astronaut' && e.shootTimer <= 0) {
+      e.shootTimer = 8;
+      const dx = (chicken.x + BIPLANE_WIDTH / 2) - (e.x + e.width / 2);
+      const dy = (chicken.y + BIPLANE_HEIGHT / 2) - (e.y + e.height / 2);
+      const baseAngle = Math.atan2(dy, dx);
+      const spreadRad = (10 * Math.PI / 180) / 2;
+      const angle = baseAngle + (Math.random() - 0.5) * spreadRad * 2;
+      const speed = 18;
+      level4Projectiles.push({
+        x: e.x + e.width / 2,
+        y: e.y + e.height / 2 + 60,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        radius: 5,
+        color: '#ffff00',
+        enemy: true,
+        damage: 1
+      });
+    }
+    const offLeft = e.x < -80;
+    const offRight = e.x > GAME_WIDTH + 80;
+    const offTop = e.y < -80;
+    const offBottom = e.y > GAME_HEIGHT + 80;
+    if (offLeft || offRight || offTop || offBottom) level4Enemies.splice(i, 1);
+  }
+  for (let i = level4Projectiles.length - 1; i >= 0; i--) {
+    const p = level4Projectiles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    if (p.x < -20 || p.x > GAME_WIDTH + 20 || p.y < -20 || p.y > GAME_HEIGHT + 20) {
+      level4Projectiles.splice(i, 1);
+    } else if (p.enemy) {
+      const planeRect = { x: chicken.x, y: chicken.y, width: BIPLANE_WIDTH, height: BIPLANE_HEIGHT };
+      if (circleRectOverlap(p.x, p.y, p.radius, planeRect) && !chicken.invincible) {
+        health -= p.damage !== undefined ? p.damage : 1;
+        chicken.invincible = true;
+        chicken.invincibleTimer = 60;
+        updateHealthDisplay();
+        level4Projectiles.splice(i, 1);
+        if (health <= 0) {
+          gameOver = true;
+          document.getElementById('game-over-screen').classList.add('visible');
+        }
+      }
+    }
+  }
+}
+
 function updateChicken() {
+  if (gameState === STATE.LEVEL_4) {
+    updateBiplane();
+    return;
+  }
   chicken.vx = 0;
   if (keys['KeyA'] || keys['ArrowLeft']) {
     chicken.vx = -MOVE_SPEED;
@@ -1422,18 +2148,25 @@ function updateEggs() {
 
     if (gameState === STATE.LEVEL_2 && !boss.exploding) {
       const eggRect = { x: egg.x - EGG_SIZE, y: egg.y - EGG_SIZE, width: EGG_SIZE * 2, height: EGG_SIZE * 2.4 };
-      const toe = getBossToeRect();
-      if (rectOverlap(eggRect, toe)) {
-        if (isToeExposed()) {
-          boss.toeHealth--;
-          eggs.splice(i, 1);
-          if (boss.toeHealth <= 0) {
-            boss.exploding = true;
-            triggerBossExplosion();
+      const headSpot = getBossHeadSpotRect();
+      if (rectOverlap(eggRect, headSpot)) {
+        boss.toeExposedTimer = 120;
+        triggerEggSplat(egg.x + EGG_SIZE, egg.y + EGG_SIZE);
+        eggs.splice(i, 1);
+      } else {
+        const toe = getBossToeRect();
+        if (rectOverlap(eggRect, toe)) {
+          if (isToeExposed()) {
+            boss.toeHealth--;
+            eggs.splice(i, 1);
+            if (boss.toeHealth <= 0) {
+              boss.exploding = true;
+              triggerBossExplosion();
+            }
+          } else {
+            triggerEggSplat(egg.x + EGG_SIZE, egg.y + EGG_SIZE);
+            eggs.splice(i, 1);
           }
-        } else {
-          triggerEggSplat(egg.x + EGG_SIZE, egg.y + EGG_SIZE);
-          eggs.splice(i, 1);
         }
       }
     }
@@ -1482,6 +2215,74 @@ function updateEggs() {
             hit = true;
             break;
           }
+        }
+      }
+    }
+
+    if (gameState === STATE.LEVEL_4 && egg.level4) {
+      const eggSize = LEVEL_4_EGG_SIZE;
+      const eggRect = { x: egg.x - eggSize, y: egg.y - eggSize, width: eggSize * 2, height: eggSize * 2.4 };
+      let hitEnemy = false;
+      for (let e = level4Enemies.length - 1; e >= 0; e--) {
+        const enemy = level4Enemies[e];
+        if (!isLevel4EnemyVisible(enemy)) continue;
+        if (rectOverlap(eggRect, enemy)) {
+          if (egg.bomb) {
+            if (enemy.type === 'astronaut') {
+              if (!isEggHitThroughAstronautShieldCutout(egg, enemy)) {
+                triggerEggSplat(egg.x + eggSize, egg.y + eggSize);
+              } else {
+                const damage = Math.ceil(enemy.maxHealth / 2);
+                enemy.health -= damage;
+                triggerEnemyExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
+                if (enemy.health <= 0) {
+                  level4AstronautKilled = true;
+                  triggerAstronautExplosion();
+                  level4Enemies.splice(e, 1);
+                }
+              }
+            } else {
+              const cx = enemy.x + enemy.width / 2;
+              const cy = enemy.y + enemy.height / 2;
+              for (let j = level4Enemies.length - 1; j >= 0; j--) {
+                const other = level4Enemies[j];
+                if (other.type === 'astronaut') continue;
+                if (!isLevel4EnemyVisible(other)) continue;
+                const ocx = other.x + other.width / 2;
+                const ocy = other.y + other.height / 2;
+                if (Math.hypot(cx - ocx, cy - ocy) <= LEVEL_4_BOMB_RADIUS) {
+                  if (other.type === 'lander') level4LandersKilled++;
+                  else if (other.type === 'beetle') level4BeetlesKilled++;
+                  else triggerEnemyExplosion(ocx, ocy);
+                  level4Enemies.splice(j, 1);
+                }
+              }
+            }
+          } else {
+            if (enemy.type === 'astronaut') {
+              if (!isEggHitThroughAstronautShieldCutout(egg, enemy)) {
+                triggerEggSplat(egg.x + eggSize, egg.y + eggSize);
+                eggs.splice(i, 1);
+                hitEnemy = true;
+                break;
+              }
+            }
+            enemy.health--;
+            if (enemy.health <= 0) {
+              if (enemy.type === 'lander') level4LandersKilled++;
+              else if (enemy.type === 'beetle') level4BeetlesKilled++;
+              else if (enemy.type === 'astronaut') {
+                level4AstronautKilled = true;
+                triggerAstronautExplosion();
+              } else {
+                triggerEnemyExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
+              }
+              level4Enemies.splice(e, 1);
+            }
+          }
+          eggs.splice(i, 1);
+          hitEnemy = true;
+          break;
         }
       }
     }
@@ -1664,9 +2465,6 @@ function updateBoss() {
   if (b.maceAngle > 1.5) b.maceSwingDir = -1;
   if (b.maceAngle < -1.5) b.maceSwingDir = 1;
 
-  // Toe exposure: when mace at top AND boss moving, expose toe for ~0.5 sec (30 frames)
-  const maceAtTop = b.maceAngle >= -1.55 && b.maceAngle <= -1.35;
-  if (b.isMoving && maceAtTop) b.toeExposedTimer = 30;
   if (b.toeExposedTimer > 0) b.toeExposedTimer--;
 }
 
@@ -1690,6 +2488,19 @@ function checkLevel3Complete() {
   if (level3Transitioning) return;
   if (bricks.length === 0) {
     level3Transitioning = true;
+    document.getElementById('level-complete-screen').querySelector('h2').textContent = 'Level Complete!';
+    document.getElementById('level-complete-screen').querySelector('p').textContent = 'Entering the Skies...';
+    document.getElementById('level-complete-screen').classList.add('visible');
+    setTimeout(() => {
+      document.getElementById('level-complete-screen').classList.remove('visible');
+      startLevel4();
+      level3Transitioning = false;
+    }, 1500);
+  }
+}
+
+function checkLevel4Complete() {
+  if (level4AstronautKilled && level4Enemies.length === 0) {
     document.getElementById('you-won-screen').classList.add('visible');
     gameState = STATE.YOU_WON;
   }
@@ -1764,6 +2575,30 @@ function gameLoop() {
     drawChicken();
     if (!level3Exploding) drawLevel3Timer();
     else drawLevel3Explosion();
+  } else if (gameState === STATE.LEVEL_4) {
+    if (level4AstronautExploding) {
+      updateAstronautExplosion();
+      drawBackgroundLevel4();
+      drawAstronautExplosion();
+    } else {
+      if (!gameOver) {
+        updateChicken();
+        updateEggs();
+        updateLevel4Enemies();
+        updateEnemyExplosions();
+      }
+      drawBackgroundLevel4();
+      drawLevel4Projectiles();
+      drawLevel4Enemies();
+      drawLevel4Bombs();
+      drawLevel4MedCrosses();
+      drawLevel4ShieldItem();
+      eggs.forEach(drawEgg);
+      drawBiplane();
+      drawLevel4ShieldEffect();
+      drawEnemyExplosions();
+      checkLevel4Complete();
+    }
   }
 
   requestAnimationFrame(gameLoop);
@@ -1789,6 +2624,12 @@ function init() {
     e.preventDefault();
     document.getElementById('main-menu').classList.add('hidden');
     startLevel1();
+  });
+  const skip4Btn = document.getElementById('skip-to-level4');
+  if (skip4Btn) skip4Btn.addEventListener('click', (e) => {
+    e.preventDefault();
+    document.getElementById('main-menu').classList.add('hidden');
+    startLevel4();
   });
   document.getElementById('menu-btn').addEventListener('click', () => {
     document.getElementById('you-won-screen').classList.remove('visible');
