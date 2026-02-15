@@ -47,7 +47,8 @@ const chicken = {
   facingRight: true,
   lookingUp: false,
   invincible: false,
-  invincibleTimer: 0
+  invincibleTimer: 0,
+  hasTopHat: false
 };
 
 // Egg projectiles
@@ -97,11 +98,16 @@ let level3FireCooldown = 0;
 
 const spaceships = [];
 const SPACESHIP_WIDTH = 24;
+let level3Jellybean = null;
+let megaBurstTimer = 0;
 const SPACESHIP_HEIGHT = 16;
 const SPACESHIP_SPEED = 3;
 let level3SpaceshipSpawnTimer = 0;
 
 let platforms = platformsLevel1;
+
+// Level 1 coin (top hat unlock)
+let level1Coin = null;
 
 // Enemies - 5 green blobs (level 1)
 const enemies = [];
@@ -166,11 +172,23 @@ function initEnemies() {
       health: ENEMY_MAX_HEALTH,
       maxHealth: ENEMY_MAX_HEALTH,
       vx: ENEMY_SPEED * (i % 2 === 0 ? 1 : -1),
+      vy: 0,
       platformIndex: pos.platformIndex,
       leftBound: platform.x,
-      rightBound: platform.x + platform.width - ENEMY_WIDTH
+      rightBound: platform.x + platform.width - ENEMY_WIDTH,
+      jumpCooldown: i * 20
     });
   });
+
+  // Coin on last platform (right side)
+  const lastPlatform = platforms[7];
+  level1Coin = {
+    x: lastPlatform.x + lastPlatform.width / 2 - 12,
+    y: lastPlatform.y - 28,
+    width: 24,
+    height: 24,
+    collected: false
+  };
 
   // Init bats - 5 flying bats
   bats.length = 0;
@@ -228,6 +246,8 @@ function initBoss() {
   boss.maceSwingDir = 1;
   boss.maceVariationPhase = 0;
   boss.maceLength = 80;
+  boss.isMoving = false;
+  boss.toeExposedTimer = 0;
   boss.explosionParticles = [];
   boss.exploding = false;
   boss.explosionTimer = 0;
@@ -267,6 +287,8 @@ function initShields() {
     { x: GAME_WIDTH / 2 - 45, y: 320, width: 90, height: 16, vx: 7 },
     { x: GAME_WIDTH / 2 - 35, y: 260, width: 70, height: 14, vx: 3 }
   );
+  level3Jellybean = { shieldIndex: 0, width: 20, height: 20, collected: false };
+  megaBurstTimer = 0;
   eggSplats.length = 0;
   level3TimeLeft = LEVEL_3_TIME;
   level3Exploding = false;
@@ -569,6 +591,27 @@ function drawBricks() {
   });
 }
 
+function drawJellybean() {
+  if (!level3Jellybean || level3Jellybean.collected) return;
+  const s = shields[level3Jellybean.shieldIndex];
+  const x = s.x + s.width / 2 - level3Jellybean.width / 2;
+  const y = s.y - level3Jellybean.height - 2;
+  const w = level3Jellybean.width;
+  const h = level3Jellybean.height;
+  const gradient = ctx.createLinearGradient(x, y, x + w, y + h);
+  gradient.addColorStop(0, '#ff69b4');
+  gradient.addColorStop(0.3, '#ff1493');
+  gradient.addColorStop(0.7, '#ff85c1');
+  gradient.addColorStop(1, '#ffb6c1');
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.ellipse(x + w / 2, y + h / 2, w / 2 - 2, h / 2 - 2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#c71585';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+}
+
 function drawShields() {
   const shieldColors = ['#4a90d9', '#5aa0e9', '#3a80c9'];
   shields.forEach((s, i) => {
@@ -699,6 +742,13 @@ function drawLevel3Timer() {
   ctx.lineWidth = 3;
   ctx.strokeText(secs + 's', GAME_WIDTH / 2, 35);
   ctx.fillText(secs + 's', GAME_WIDTH / 2, 35);
+  if (megaBurstTimer > 0) {
+    const burstSecs = Math.ceil(megaBurstTimer / 60);
+    ctx.fillStyle = '#ffcc00';
+    ctx.font = 'bold 24px sans-serif';
+    ctx.strokeText('MEGA BURST: ' + burstSecs + 's', GAME_WIDTH / 2, 70);
+    ctx.fillText('MEGA BURST: ' + burstSecs + 's', GAME_WIDTH / 2, 70);
+  }
   ctx.textAlign = 'left';
 }
 
@@ -795,6 +845,23 @@ function drawChicken() {
   ctx.fill();
   ctx.restore();
 
+  // Top hat (persists for rest of game when obtained in level 1)
+  if (chicken.hasTopHat) {
+    ctx.save();
+    if (chicken.lookingUp || gameState === STATE.LEVEL_3) {
+      ctx.translate(20, 12);
+      ctx.rotate(-Math.PI / 2);
+      ctx.translate(-20, -12);
+    }
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(14, -8, 12, 14);
+    ctx.fillStyle = '#2a2a2a';
+    ctx.fillRect(12, 4, 16, 4);
+    ctx.fillStyle = '#0d0d0d';
+    ctx.fillRect(15, -10, 10, 4);
+    ctx.restore();
+  }
+
   ctx.restore();
 }
 
@@ -806,6 +873,22 @@ function drawEgg(egg) {
   ctx.strokeStyle = '#e8d4a8';
   ctx.lineWidth = 1;
   ctx.stroke();
+}
+
+function drawCoin() {
+  if (!level1Coin || level1Coin.collected) return;
+  const c = level1Coin;
+  ctx.fillStyle = '#ffd700';
+  ctx.beginPath();
+  ctx.ellipse(c.x + c.width / 2, c.y + c.height / 2, c.width / 2 - 2, c.height / 2 - 2, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#b8860b';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = '#ffec8b';
+  ctx.beginPath();
+  ctx.ellipse(c.x + c.width / 2, c.y + c.height / 2, c.width / 4, c.height / 4, 0, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 function drawEnemy(enemy) {
@@ -968,6 +1051,21 @@ function drawBoss() {
   ctx.lineWidth = 2;
   ctx.strokeRect(toeX, toeY, toeW, toeH);
 
+  // Toe shield - covers weak spot unless boss is moving AND mace is at top of swing
+  if (!isToeExposed()) {
+    const shieldX = toeX - 8;
+    const shieldY = toeY - 5;
+    const shieldW = toeW + 16;
+    const shieldH = toeH + 12;
+    ctx.fillStyle = '#8b7355';
+    ctx.fillRect(shieldX, shieldY, shieldW, shieldH);
+    ctx.strokeStyle = '#5a4a35';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(shieldX, shieldY, shieldW, shieldH);
+    ctx.fillStyle = '#6b5a45';
+    ctx.fillRect(shieldX + 4, shieldY + 4, shieldW - 8, shieldH - 8);
+  }
+
   // Toe health
   ctx.fillStyle = '#333';
   ctx.fillRect(b.x + 30, b.y - 25, 60, 8);
@@ -1041,6 +1139,11 @@ function getBossToeRect() {
   };
 }
 
+// Toe is exposed when toeExposedTimer > 0. Timer set to ~0.5 sec when mace at top + boss moving.
+function isToeExposed() {
+  return (boss.toeExposedTimer || 0) > 0;
+}
+
 // Returns mace center, end position. Mace is on side closest to player. Length can extend to 2x (160).
 function getMacePositions() {
   const b = boss;
@@ -1097,6 +1200,27 @@ function updateChicken() {
       chicken.canDoubleJump = true;
     }
   });
+  // Level 3: shields are solid platforms (land on top, cannot jump through)
+  if (gameState === STATE.LEVEL_3) {
+    shields.forEach(s => {
+      const overlapX = chicken.x + chicken.width > s.x && chicken.x < s.x + s.width;
+      if (chicken.vy >= 0 &&
+          overlapX &&
+          chicken.y + chicken.height >= s.y &&
+          chicken.y + chicken.height <= s.y + 20) {
+        chicken.y = s.y - chicken.height;
+        chicken.vy = 0;
+        chicken.onGround = true;
+        chicken.canDoubleJump = true;
+      }
+      if (chicken.vy < 0 && overlapX &&
+          chicken.y + chicken.height > s.y &&
+          chicken.y < s.y + s.height) {
+        chicken.y = s.y + s.height;
+        chicken.vy = 0;
+      }
+    });
+  }
 
   const jumpKey = keys['Space'] || keys['KeyW'] || keys['ArrowUp'];
   if (jumpKey) {
@@ -1116,16 +1240,32 @@ function updateChicken() {
   chicken.lookingUp = keys['KeyE'] || false;
 
   if (gameState === STATE.LEVEL_3) {
+    if (megaBurstTimer > 0) megaBurstTimer--;
     if (keys['KeyJ'] || keys['ControlLeft']) {
       level3FireCooldown--;
       if (level3FireCooldown <= 0) {
         level3FireCooldown = 60 / LEVEL_3_FIRE_RATE;
-        eggs.push({
-          x: chicken.x + chicken.width / 2 - EGG_SIZE,
-          y: chicken.y + 5 - EGG_SIZE,
-          vx: 0,
-          vy: -EGG_SPEED
-        });
+        const cx = chicken.x + chicken.width / 2 - EGG_SIZE;
+        const cy = chicken.y + 5 - EGG_SIZE;
+        if (megaBurstTimer > 0) {
+          const spreadRad = (30 * Math.PI / 180) / 2;
+          for (let i = 0; i < 3; i++) {
+            const angle = Math.PI / 2 + (Math.random() - 0.5) * spreadRad * 2;
+            eggs.push({
+              x: cx,
+              y: cy,
+              vx: EGG_SPEED * Math.cos(angle),
+              vy: -EGG_SPEED * Math.sin(angle)
+            });
+          }
+        } else {
+          eggs.push({
+            x: cx,
+            y: cy,
+            vx: 0,
+            vy: -EGG_SPEED
+          });
+        }
       }
     } else {
       level3FireCooldown = 0;
@@ -1182,6 +1322,25 @@ function updateChicken() {
         }
       }
     });
+    if (level1Coin && !level1Coin.collected && rectOverlap(chicken, level1Coin, 2)) {
+      level1Coin.collected = true;
+      chicken.hasTopHat = true;
+    }
+  }
+
+  // Jellybean collection (level 3)
+  if (gameState === STATE.LEVEL_3 && level3Jellybean && !level3Jellybean.collected && !level3Exploding) {
+    const s = shields[level3Jellybean.shieldIndex];
+    const jb = {
+      x: s.x + s.width / 2 - level3Jellybean.width / 2,
+      y: s.y - level3Jellybean.height - 2,
+      width: level3Jellybean.width,
+      height: level3Jellybean.height
+    };
+    if (rectOverlap(chicken, jb, 2)) {
+      level3Jellybean.collected = true;
+      megaBurstTimer = 600;
+    }
   }
 
   // Spaceship collision (level 3)
@@ -1231,13 +1390,15 @@ function updateEggs() {
     }
 
     if (gameState === STATE.LEVEL_1) {
-      for (const enemy of enemies) {
+      for (let e = enemies.length - 1; e >= 0; e--) {
+        const enemy = enemies[e];
         if (enemy.health > 0) {
           const eggRect = { x: egg.x - EGG_SIZE, y: egg.y - EGG_SIZE, width: EGG_SIZE * 2, height: EGG_SIZE * 2.4 };
           if (rectOverlap(eggRect, enemy)) {
             enemy.health--;
             if (enemy.health <= 0) {
               triggerEnemyExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
+              enemies.splice(e, 1);
             }
             eggs.splice(i, 1);
             break;
@@ -1263,11 +1424,16 @@ function updateEggs() {
       const eggRect = { x: egg.x - EGG_SIZE, y: egg.y - EGG_SIZE, width: EGG_SIZE * 2, height: EGG_SIZE * 2.4 };
       const toe = getBossToeRect();
       if (rectOverlap(eggRect, toe)) {
-        boss.toeHealth--;
-        eggs.splice(i, 1);
-        if (boss.toeHealth <= 0) {
-          boss.exploding = true;
-          triggerBossExplosion();
+        if (isToeExposed()) {
+          boss.toeHealth--;
+          eggs.splice(i, 1);
+          if (boss.toeHealth <= 0) {
+            boss.exploding = true;
+            triggerBossExplosion();
+          }
+        } else {
+          triggerEggSplat(egg.x + EGG_SIZE, egg.y + EGG_SIZE);
+          eggs.splice(i, 1);
         }
       }
     }
@@ -1335,18 +1501,55 @@ function triggerEggSplat(x, y) {
   }
 }
 
+const ENEMY_JUMP_FORCE = -10;
+const ENEMY_JUMP_COOLDOWN = 90;
+
 function updateEnemies() {
+  const chickenCenterX = chicken.x + chicken.width / 2;
   enemies.forEach(enemy => {
     if (enemy.health <= 0) return;
+    const enemyCenterX = enemy.x + enemy.width / 2;
+
+    // Move toward player
+    if (chickenCenterX > enemyCenterX + 10) enemy.vx = ENEMY_SPEED;
+    else if (chickenCenterX < enemyCenterX - 10) enemy.vx = -ENEMY_SPEED;
+
     enemy.x += enemy.vx;
-    const platform = platforms[enemy.platformIndex];
-    if (enemy.x <= platform.x) {
-      enemy.x = platform.x;
-      enemy.vx = ENEMY_SPEED;
+
+    // Gravity and jumping
+    enemy.vy += GRAVITY * 0.8;
+    enemy.y += enemy.vy;
+
+    // Land on any platform
+    let landed = false;
+    for (const p of platforms) {
+      if (enemy.vy >= 0 &&
+          enemy.x + enemy.width > p.x &&
+          enemy.x < p.x + p.width &&
+          enemy.y + enemy.height >= p.y &&
+          enemy.y + enemy.height <= p.y + 15) {
+        enemy.y = p.y - enemy.height;
+        enemy.vy = 0;
+        enemy.platformIndex = platforms.indexOf(p);
+        landed = true;
+        break;
+      }
     }
-    if (enemy.x >= platform.x + platform.width - enemy.width) {
-      enemy.x = platform.x + platform.width - enemy.width;
-      enemy.vx = -ENEMY_SPEED;
+    if (landed) {
+      const platform = platforms[enemy.platformIndex];
+      if (enemy.x <= platform.x) {
+        enemy.x = platform.x;
+        enemy.vx = ENEMY_SPEED;
+      }
+      if (enemy.x >= platform.x + platform.width - enemy.width) {
+        enemy.x = platform.x + platform.width - enemy.width;
+        enemy.vx = -ENEMY_SPEED;
+      }
+      enemy.jumpCooldown = (enemy.jumpCooldown || 0) - 1;
+      if (enemy.jumpCooldown <= 0) {
+        enemy.vy = ENEMY_JUMP_FORCE;
+        enemy.jumpCooldown = ENEMY_JUMP_COOLDOWN + Math.floor(Math.random() * 30);
+      }
     }
   });
 }
@@ -1428,14 +1631,17 @@ function updateBoss() {
   }
 
   const b = boss;
+  b.isMoving = false;
 
   // Move toward the player
   const chickenCenterX = chicken.x + chicken.width / 2;
   const bossCenterX = b.x + b.width / 2;
   const diff = chickenCenterX - bossCenterX;
   if (Math.abs(diff) > 15) {
+    const prevX = b.x;
     b.x += (diff > 0 ? 1 : -1) * Math.min(b.moveSpeed, Math.abs(diff) / 2);
     b.x = Math.max(0, Math.min(GAME_WIDTH - b.width, b.x));
+    if (b.x !== prevX) b.isMoving = true;
   }
 
   // Extend mace to 2x length (160) when player is on a side platform
@@ -1457,6 +1663,11 @@ function updateBoss() {
   b.maceAngle += b.maceSwingSpeed * b.maceSwingDir;
   if (b.maceAngle > 1.5) b.maceSwingDir = -1;
   if (b.maceAngle < -1.5) b.maceSwingDir = 1;
+
+  // Toe exposure: when mace at top AND boss moving, expose toe for ~0.5 sec (30 frames)
+  const maceAtTop = b.maceAngle >= -1.55 && b.maceAngle <= -1.35;
+  if (b.isMoving && maceAtTop) b.toeExposedTimer = 30;
+  if (b.toeExposedTimer > 0) b.toeExposedTimer--;
 }
 
 function checkLevel1Complete() {
@@ -1503,6 +1714,7 @@ function gameLoop() {
     }
     drawBackgroundLevel1();
     drawPlatforms();
+    drawCoin();
     eggs.forEach(drawEgg);
     cheesePieces.forEach(drawCheese);
     enemies.forEach(drawEnemy);
@@ -1545,6 +1757,7 @@ function gameLoop() {
     drawPlatforms();
     drawBricks();
     drawShields();
+    drawJellybean();
     drawSpaceships();
     eggs.forEach(drawEgg);
     drawEggSplats();
