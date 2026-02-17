@@ -88,6 +88,7 @@ const LEVEL_4_EGG_SIZE = 5;
 const LEVEL_4_EGG_SPEED = 14;
 const LEVEL_4_FIRE_RATE = 12;
 const LEVEL_4_BOMB_RADIUS = 100;
+const LEVEL_4_SHIELD_MAX = 600;
 const RAIL_DAMAGE = 2;
 let level4Stars = [];
 let level4Comets = [];
@@ -96,7 +97,6 @@ let level4Enemies = [];
 let level4Projectiles = [];
 let level4Bombs = [];
 let level4BombActive = false;
-let level4Shield = null;
 let level4ShieldTimer = 0;
 let level4Phase = 0;
 let level4LandersKilled = 0;
@@ -106,6 +106,8 @@ let level4AstronautSpawned = false;
 let level4MedCrosses = [];
 let level4AstronautExploding = false;
 let level4AstronautExplosionParticles = [];
+let level4AstronautExplosionTimer = 0;
+let level4EnemyDebris = [];
 let level4SpawnTimer = 0;
 let level4FireCooldown = 0;
 
@@ -240,35 +242,39 @@ function initEnemies() {
 
 function triggerAstronautExplosion() {
   level4AstronautExploding = true;
+  level4AstronautExplosionTimer = 120; // 2 seconds at 60fps
   level4AstronautExplosionParticles = [];
-  for (let i = 0; i < 400; i++) {
+  for (let i = 0; i < 600; i++) {
     level4AstronautExplosionParticles.push({
       x: Math.random() * GAME_WIDTH,
       y: Math.random() * GAME_HEIGHT,
-      vx: (Math.random() - 0.5) * 20,
-      vy: (Math.random() - 0.5) * 20,
-      size: 15 + Math.random() * 40,
+      vx: (Math.random() - 0.5) * 25,
+      vy: (Math.random() - 0.5) * 25,
+      size: 25 + Math.random() * 80,
       life: 1,
-      color: ['#4488ff', '#66aaff', '#2288dd', '#aaddff', '#3377cc'][Math.floor(Math.random() * 5)]
+      color: ['#2266ff', '#4488ff', '#66aaff', '#2288dd', '#aaddff', '#3377cc', '#1155dd'][Math.floor(Math.random() * 7)]
     });
   }
 }
 
 function updateAstronautExplosion() {
+  level4AstronautExplosionTimer--;
   level4AstronautExplosionParticles.forEach(p => {
     p.x += p.vx;
     p.y += p.vy;
-    p.life -= 0.012;
+    p.life -= 0.008;
   });
   level4AstronautExplosionParticles = level4AstronautExplosionParticles.filter(p => p.life > 0);
-  if (level4AstronautExplosionParticles.length === 0) {
+  if (level4AstronautExplosionTimer <= 0) {
     document.getElementById('you-won-screen').classList.add('visible');
     gameState = STATE.YOU_WON;
   }
 }
 
 function drawAstronautExplosion() {
-  ctx.fillStyle = 'rgba(0, 50, 100, 0.3)';
+  const progress = 1 - level4AstronautExplosionTimer / 120;
+  const blueIntensity = 0.4 + progress * 0.5;
+  ctx.fillStyle = `rgba(20, 60, 180, ${blueIntensity})`;
   ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
   level4AstronautExplosionParticles.forEach(p => {
     ctx.fillStyle = p.color;
@@ -278,6 +284,97 @@ function drawAstronautExplosion() {
     ctx.fill();
   });
   ctx.globalAlpha = 1;
+}
+
+function spawnLevel4EnemyDebris(enemy) {
+  const vx = 5 + Math.random() * 6;
+  const vy = (Math.random() - 0.5) * 8;
+  level4EnemyDebris.push({
+    x: enemy.x,
+    y: enemy.y,
+    type: enemy.type,
+    width: enemy.width,
+    height: enemy.height,
+    vx,
+    vy,
+    rotation: 0,
+    rotationSpeed: (Math.random() - 0.5) * 0.3,
+    damage: 1
+  });
+  for (let i = 0; i < 12; i++) {
+    enemyExplosions.push({
+      x: enemy.x + enemy.width / 2 + (Math.random() - 0.5) * 30,
+      y: enemy.y + enemy.height / 2 + (Math.random() - 0.5) * 30,
+      vx: (Math.random() - 0.5) * 4,
+      vy: (Math.random() - 0.5) * 4,
+      size: 8 + Math.random() * 12,
+      life: 1,
+      color: ['#ff8800', '#ff6600', '#ffaa00', '#ff4400'][Math.floor(Math.random() * 4)]
+    });
+  }
+}
+
+function updateLevel4EnemyDebris() {
+  for (let i = level4EnemyDebris.length - 1; i >= 0; i--) {
+    const d = level4EnemyDebris[i];
+    d.x += d.vx;
+    d.y += d.vy;
+    d.rotation += d.rotationSpeed;
+    if (Math.random() < 0.4) {
+      enemyExplosions.push({
+        x: d.x + d.width / 2 + (Math.random() - 0.5) * 20,
+        y: d.y + d.height / 2 + (Math.random() - 0.5) * 20,
+        vx: (Math.random() - 0.5) * 2,
+        vy: (Math.random() - 0.5) * 2,
+        size: 6 + Math.random() * 8,
+        life: 1,
+        color: ['#ff8800', '#ff6600', '#ffaa00'][Math.floor(Math.random() * 3)]
+      });
+    }
+    const debrisRect = { x: d.x, y: d.y, width: d.width, height: d.height };
+    for (let j = level4Enemies.length - 1; j >= 0; j--) {
+      const other = level4Enemies[j];
+      if (other.type === 'astronaut') continue;
+      if (rectOverlap(debrisRect, other)) {
+        other.health -= d.damage;
+        if (other.health <= 0) {
+          if (other.type === 'lander') level4LandersKilled++;
+          else if (other.type === 'beetle') level4BeetlesKilled++;
+          spawnLevel4EnemyDebris(other);
+          level4Enemies.splice(j, 1);
+        }
+      }
+    }
+    if (d.x > GAME_WIDTH + 100 || d.y < -100 || d.y > GAME_HEIGHT + 100) {
+      level4EnemyDebris.splice(i, 1);
+    }
+  }
+}
+
+function drawLevel4EnemyDebris() {
+  level4EnemyDebris.forEach(d => {
+    ctx.save();
+    ctx.translate(d.x + d.width / 2, d.y + d.height / 2);
+    ctx.rotate(d.rotation);
+    ctx.translate(-d.width / 2, -d.height / 2);
+    if (d.type === 'lander') {
+      ctx.fillStyle = '#666';
+      ctx.fillRect(5, 10, 30, 25);
+      ctx.fillStyle = '#ff8800';
+      ctx.beginPath();
+      ctx.arc(20, 35, 6, 0, Math.PI * 2);
+      ctx.fill();
+    } else if (d.type === 'beetle') {
+      ctx.fillStyle = '#ffdd00';
+      ctx.beginPath();
+      ctx.ellipse(d.width / 2, d.height / 2, d.width / 2 - 2, d.height / 2 - 2, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#ff8800';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+    ctx.restore();
+  });
 }
 
 function triggerEnemyExplosion(x, y) {
@@ -358,7 +455,7 @@ function initShields() {
     { x: GAME_WIDTH / 2 - 45, y: 320, width: 90, height: 16, vx: 7 },
     { x: GAME_WIDTH / 2 - 35, y: 260, width: 70, height: 14, vx: 3 }
   );
-  level3Jellybean = { shieldIndex: 0, width: 20, height: 20, collected: false };
+  level3Jellybean = { shieldIndex: 0, width: 36, height: 36, collected: false };
   megaBurstTimer = 0;
   eggSplats.length = 0;
   level3TimeLeft = LEVEL_3_TIME;
@@ -373,7 +470,16 @@ function initShields() {
 let health = 5.0;
 let gameOver = false;
 let keys = {};
-let menuDanceOffset = 0;
+let menuEggs = [];
+let menuTrailParticles = [];
+let menuChickenTimer = 0;
+let menuChickenX = 0;
+let menuChickenY = 0;
+let menuChickenSide = 'bottom';
+let menuChickenFacingRight = true;
+let menuChickenFacingDown = false;
+let menuChickenPhase = 'hidden'; // 'hidden' | 'popping' | 'firing' | 'leaving'
+let menuChickenPhaseTimer = 0;
 let level1Transitioning = false;
 let level1Countdown = 0;
 
@@ -437,7 +543,6 @@ function initLevel4() {
   enemyExplosions.length = 0;
   level4Bombs = [];
   level4BombActive = false;
-  level4Shield = null;
   level4ShieldTimer = 0;
   level4Phase = 0;
   level4LandersKilled = 0;
@@ -446,6 +551,8 @@ function initLevel4() {
   level4AstronautSpawned = false;
   level4AstronautExploding = false;
   level4AstronautExplosionParticles = [];
+  level4AstronautExplosionTimer = 0;
+  level4EnemyDebris = [];
   level4MedCrosses = [];
   level4SpawnTimer = 0;
   level4FireCooldown = 0;
@@ -468,34 +575,24 @@ function initLevel4() {
     });
   }
   spawnLevel4Bombs();
-  level4Shield = {
-    x: 300 + Math.random() * (GAME_WIDTH - 500),
-    y: 80 + Math.random() * (GAME_HEIGHT - 160),
-    width: 24,
-    height: 28,
-    collected: false
-  };
+  level4ShieldTimer = LEVEL_4_SHIELD_MAX;
   level4MedCrosses = [
     { x: GAME_WIDTH + 100 + Math.random() * 200, y: 80 + Math.random() * (GAME_HEIGHT - 160), width: 28, height: 28, vx: -3 },
     { x: GAME_WIDTH + 400 + Math.random() * 300, y: 80 + Math.random() * (GAME_HEIGHT - 160), width: 28, height: 28, vx: -3 }
   ];
 }
 
+const LEVEL_4_MAX_BOMBS = 2;
+
 function spawnLevel4Bombs() {
   level4Bombs.length = 0;
-  const used = new Set();
-  for (let i = 0; i < 3; i++) {
-    let x, y;
-    let attempts = 0;
-    do {
-      x = 400 + Math.random() * (GAME_WIDTH - 500);
-      y = 80 + Math.random() * (GAME_HEIGHT - 160);
-      attempts++;
-    } while (attempts < 20);
+  for (let i = 0; i < LEVEL_4_MAX_BOMBS; i++) {
     level4Bombs.push({
-      x, y,
-      width: 20,
-      height: 24,
+      x: GAME_WIDTH + 50 + Math.random() * 200 + i * 80,
+      y: 80 + Math.random() * (GAME_HEIGHT - 160),
+      width: 28,
+      height: 28,
+      vx: -2.5 - Math.random() * 1.5,
       collected: false
     });
   }
@@ -541,18 +638,143 @@ function updateHealthDisplay() {
   }
 }
 
-// ========== MENU - Dancing Chicken (drawn on game canvas) ==========
-function drawMenuChicken(offsetY) {
+// ========== MENU - Chicken pops up and fires eggs ==========
+const MENU_EGG_COLORS = ['#ff4444', '#44ff44', '#4444ff', '#ffff44', '#ff44ff', '#44ffff', '#ff8844'];
+const MENU_TRAIL_COLORS = ['#ff6666', '#66ff66', '#6666ff', '#ffff66', '#ff66ff', '#66ffff', '#ffaa66', '#aa66ff'];
+
+function updateMenuAnimation() {
+  menuChickenTimer--;
+  if (menuChickenPhase === 'hidden' && menuChickenTimer <= 0) {
+    menuChickenPhase = 'popping';
+    menuChickenPhaseTimer = 0;
+    const side = ['top', 'bottom', 'left', 'right'][Math.floor(Math.random() * 4)];
+    menuChickenSide = side;
+    const CHICKEN_HALF_W = 120;
+    const CHICKEN_HALF_H = 132;
+    if (side === 'bottom') {
+      menuChickenX = 150 + Math.random() * (GAME_WIDTH - 300);
+      menuChickenY = GAME_HEIGHT + CHICKEN_HALF_H;
+      menuChickenFacingRight = true;
+      menuChickenFacingDown = false;
+    } else if (side === 'top') {
+      menuChickenX = 150 + Math.random() * (GAME_WIDTH - 300);
+      menuChickenY = -CHICKEN_HALF_H;
+      menuChickenFacingRight = true;
+      menuChickenFacingDown = true;
+    } else if (side === 'left') {
+      menuChickenX = -CHICKEN_HALF_W;
+      menuChickenY = 100 + Math.random() * (GAME_HEIGHT - 200);
+      menuChickenFacingRight = true;
+      menuChickenFacingDown = false;
+    } else {
+      menuChickenX = GAME_WIDTH + CHICKEN_HALF_W;
+      menuChickenY = 100 + Math.random() * (GAME_HEIGHT - 200);
+      menuChickenFacingRight = false;
+      menuChickenFacingDown = false;
+    }
+    menuChickenTimer = 60 + Math.floor(Math.random() * 60);
+  }
+  if (menuChickenPhase === 'popping') {
+    menuChickenPhaseTimer++;
+    const popDuration = 16;
+    const CHICKEN_HALF_W = 120;
+    const CHICKEN_HALF_H = 132;
+    const t = Math.min(1, menuChickenPhaseTimer / popDuration);
+    const ease = t * t;
+    if (menuChickenSide === 'bottom') {
+      menuChickenY = GAME_HEIGHT + CHICKEN_HALF_H - (CHICKEN_HALF_H * 2) * ease;
+    } else if (menuChickenSide === 'top') {
+      menuChickenY = -CHICKEN_HALF_H + (CHICKEN_HALF_H * 2) * ease;
+    } else if (menuChickenSide === 'left') {
+      menuChickenX = -CHICKEN_HALF_W + (CHICKEN_HALF_W * 2) * ease;
+    } else {
+      menuChickenX = GAME_WIDTH + CHICKEN_HALF_W - (CHICKEN_HALF_W * 2) * ease;
+    }
+    if (menuChickenPhaseTimer >= popDuration) {
+      menuChickenPhase = 'firing';
+      menuChickenPhaseTimer = 0;
+      const cx = menuChickenX;
+      const cy = menuChickenY;
+      let baseAngle = -Math.PI / 2;
+      if (menuChickenSide === 'top') baseAngle = Math.PI / 2;
+      else if (menuChickenSide === 'left') baseAngle = 0;
+      else if (menuChickenSide === 'right') baseAngle = Math.PI;
+      for (let i = 0; i < 3; i++) {
+        const angle = baseAngle + (i - 1) * 0.3 + (Math.random() - 0.5) * 0.2;
+        const speed = 10 + Math.random() * 8;
+        menuEggs.push({
+          x: cx + (Math.random() - 0.5) * 20,
+          y: cy,
+          vx: Math.cos(angle) * speed,
+          vy: Math.sin(angle) * speed,
+          color: MENU_EGG_COLORS[Math.floor(Math.random() * MENU_EGG_COLORS.length)],
+          size: 10
+        });
+      }
+    }
+  } else if (menuChickenPhase === 'firing') {
+    menuChickenPhaseTimer++;
+    if (menuChickenPhaseTimer >= 15) {
+      menuChickenPhase = 'leaving';
+      menuChickenPhaseTimer = 0;
+    }
+  } else if (menuChickenPhase === 'leaving') {
+    menuChickenPhaseTimer++;
+    const leaveDuration = 13;
+    const CHICKEN_HALF_W = 120;
+    const CHICKEN_HALF_H = 132;
+    const t = Math.min(1, menuChickenPhaseTimer / leaveDuration);
+    const ease = t * t;
+    if (menuChickenSide === 'bottom') {
+      menuChickenY = (GAME_HEIGHT - CHICKEN_HALF_H) + CHICKEN_HALF_H * 2 * ease;
+    } else if (menuChickenSide === 'top') {
+      menuChickenY = CHICKEN_HALF_H - CHICKEN_HALF_H * 2 * ease;
+    } else if (menuChickenSide === 'left') {
+      menuChickenX = CHICKEN_HALF_W - CHICKEN_HALF_W * 2 * ease;
+    } else {
+      menuChickenX = (GAME_WIDTH - CHICKEN_HALF_W) - CHICKEN_HALF_W * 2 * ease;
+    }
+    if (menuChickenPhaseTimer >= leaveDuration) {
+      menuChickenPhase = 'hidden';
+      menuChickenTimer = 60 + Math.floor(Math.random() * 60);
+    }
+  }
+  menuEggs.forEach(egg => {
+    egg.x += egg.vx;
+    egg.y += egg.vy;
+    if (Math.random() < 0.7) {
+      menuTrailParticles.push({
+        x: egg.x,
+        y: egg.y,
+        vx: egg.vx * -0.1 + (Math.random() - 0.5) * 2,
+        vy: egg.vy * -0.1 + (Math.random() - 0.5) * 2,
+        color: MENU_TRAIL_COLORS[Math.floor(Math.random() * MENU_TRAIL_COLORS.length)],
+        life: 1,
+        size: 4 + Math.random() * 6
+      });
+    }
+  });
+  menuEggs = menuEggs.filter(e => e.x > -50 && e.x < GAME_WIDTH + 50 && e.y > -50 && e.y < GAME_HEIGHT + 50);
+  menuTrailParticles.forEach(p => {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life -= 0.12;
+  });
+  menuTrailParticles = menuTrailParticles.filter(p => p.life > 0);
+}
+
+function drawMenuChicken() {
   const scale = 6;
-  const cx = GAME_WIDTH / 2;
-  const cy = GAME_HEIGHT / 2 - 50 + offsetY;
+  const cx = menuChickenX;
+  const cy = menuChickenY;
 
   ctx.save();
   ctx.translate(cx, cy);
+  if (menuChickenFacingDown) ctx.rotate(Math.PI);
+  if (!menuChickenFacingRight) ctx.scale(-1, 1);
   ctx.scale(scale, scale);
   ctx.translate(-20, -22);
 
-  // Body (yellow/white)
   ctx.fillStyle = '#fff5d4';
   ctx.beginPath();
   ctx.ellipse(20, 28, 14, 18, 0, 0, Math.PI * 2);
@@ -561,14 +783,12 @@ function drawMenuChicken(offsetY) {
   ctx.lineWidth = 2;
   ctx.stroke();
 
-  // Head
   ctx.fillStyle = '#fff5d4';
   ctx.beginPath();
   ctx.arc(20, 12, 10, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
 
-  // Comb (red)
   ctx.fillStyle = '#e63946';
   ctx.beginPath();
   ctx.moveTo(18, 2);
@@ -577,7 +797,6 @@ function drawMenuChicken(offsetY) {
   ctx.closePath();
   ctx.fill();
 
-  // Beak
   ctx.fillStyle = '#ff9f43';
   ctx.beginPath();
   ctx.moveTo(28, 12);
@@ -586,7 +805,6 @@ function drawMenuChicken(offsetY) {
   ctx.closePath();
   ctx.fill();
 
-  // Eye
   ctx.fillStyle = '#333';
   ctx.beginPath();
   ctx.arc(26, 10, 2, 0, Math.PI * 2);
@@ -596,10 +814,8 @@ function drawMenuChicken(offsetY) {
 }
 
 function drawMenu() {
-  menuDanceOffset += 0.08;
-  const bounceY = Math.sin(menuDanceOffset) * 12;
+  updateMenuAnimation();
 
-  // Menu background
   const gradient = ctx.createLinearGradient(0, 0, 0, GAME_HEIGHT);
   gradient.addColorStop(0, '#0a0a1a');
   gradient.addColorStop(0.5, '#1a1a3a');
@@ -607,7 +823,6 @@ function drawMenu() {
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
 
-  // Stars
   ctx.fillStyle = '#fff';
   for (let i = 0; i < 80; i++) {
     const x = (i * 37 + 13) % GAME_WIDTH;
@@ -617,7 +832,28 @@ function drawMenu() {
     ctx.fill();
   }
 
-  drawMenuChicken(bounceY);
+  menuTrailParticles.forEach(p => {
+    ctx.fillStyle = p.color;
+    ctx.globalAlpha = p.life;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+
+  menuEggs.forEach(egg => {
+    ctx.fillStyle = egg.color;
+    ctx.beginPath();
+    ctx.ellipse(egg.x, egg.y, egg.size, egg.size * 1.2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  });
+
+  if (menuChickenPhase !== 'hidden') {
+    drawMenuChicken();
+  }
 }
 
 function drawLevel1Countdown() {
@@ -640,6 +876,8 @@ function drawControlsHint() {
   const gap = 3;
   const baseX = 20;
   const baseY = GAME_HEIGHT - 70;
+  const showE = gameState === STATE.LEVEL_1 || gameState === STATE.LEVEL_2;
+  const showSpace = gameState === STATE.LEVEL_4;
   ctx.save();
   ctx.fillStyle = 'rgba(255,255,255,0.15)';
   ctx.strokeStyle = 'rgba(255,255,255,0.5)';
@@ -655,10 +893,12 @@ function drawControlsHint() {
     ctx.fillStyle = 'rgba(255,255,255,0.15)';
   };
   drawKey(baseX + keyW + gap, baseY, keyW, keyH, 'W');
+  if (showE) drawKey(baseX + (keyW + gap) * 2, baseY, keyW, keyH, 'E');
   drawKey(baseX, baseY + keyH + gap, keyW, keyH, 'A');
   drawKey(baseX + keyW + gap, baseY + keyH + gap, keyW, keyH, 'S');
   drawKey(baseX + (keyW + gap) * 2, baseY + keyH + gap, keyW, keyH, 'D');
   drawKey(baseX + (keyW + gap) * 4, baseY + keyH + gap, keyW + 4, keyH, 'J');
+  if (showSpace) drawKey(baseX + (keyW + gap) * 5 + 4, baseY + keyH + gap, 42, keyH, 'Space');
   ctx.restore();
 }
 
@@ -838,6 +1078,16 @@ function drawBiplane() {
   ctx.strokeStyle = '#991111';
   ctx.stroke();
 
+  if (level4BombActive) {
+    ctx.fillStyle = '#ff0000';
+    ctx.beginPath();
+    ctx.arc(bx + BIPLANE_WIDTH + 12, cy, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#aa0000';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  }
+
   // Cockpit (white circle)
   ctx.fillStyle = '#e8f4fc';
   ctx.beginPath();
@@ -942,24 +1192,25 @@ function drawLevel4Projectiles() {
   });
 }
 
-function drawLevel4ShieldItem() {
-  if (!level4Shield || level4Shield.collected) return;
-  const s = level4Shield;
-  ctx.fillStyle = '#4488ff';
-  ctx.strokeStyle = '#2266cc';
+function drawLevel4ShieldBar() {
+  const barW = 200;
+  const barH = 12;
+  const barX = (GAME_WIDTH - barW) / 2;
+  const barY = GAME_HEIGHT - 28;
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(barX, barY, barW, barH);
+  ctx.strokeStyle = 'rgba(68, 136, 255, 0.8)';
   ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.arc(s.x + s.width / 2, s.y + s.height / 2, s.width / 2 + 4, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = '#66aaff';
-  ctx.beginPath();
-  ctx.arc(s.x + s.width / 2, s.y + s.height / 2, s.width / 4, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.strokeRect(barX, barY, barW, barH);
+  const fillW = (barW - 4) * Math.max(0, level4ShieldTimer) / LEVEL_4_SHIELD_MAX;
+  if (fillW > 0) {
+    ctx.fillStyle = 'rgba(68, 136, 255, 0.8)';
+    ctx.fillRect(barX + 2, barY + 2, fillW, barH - 4);
+  }
 }
 
 function drawLevel4ShieldEffect() {
-  if (level4ShieldTimer <= 0) return;
+  if (!chicken.invincible || chicken.invincibleTimer > 0) return;
   const cx = chicken.x + BIPLANE_WIDTH / 2;
   const cy = chicken.y + BIPLANE_HEIGHT / 2;
   const pulse = 0.7 + 0.3 * Math.sin(Date.now() / 80);
@@ -994,13 +1245,21 @@ function drawLevel4MedCrosses() {
 function drawLevel4Bombs() {
   level4Bombs.forEach(b => {
     if (b.collected) return;
-    ctx.fillStyle = '#ff4444';
+    const cx = b.x + b.width / 2;
+    const cy = b.y + b.height / 2;
+    const radius = 18;
+    ctx.fillStyle = '#dd0000';
     ctx.beginPath();
-    ctx.ellipse(b.x + b.width / 2, b.y + b.height / 2, b.width / 2 - 2, b.height / 2 - 2, 0, 0, Math.PI * 2);
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
     ctx.fill();
     ctx.strokeStyle = '#aa0000';
     ctx.lineWidth = 2;
     ctx.stroke();
+    ctx.fillStyle = '#ffffff';
+    ctx.font = 'bold 22px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('B', cx, cy);
   });
 }
 
@@ -1044,6 +1303,8 @@ function drawJellybean() {
   const y = s.y - level3Jellybean.height - 2;
   const w = level3Jellybean.width;
   const h = level3Jellybean.height;
+  const cx = x + w / 2;
+  const cy = y + h / 2;
   const gradient = ctx.createLinearGradient(x, y, x + w, y + h);
   gradient.addColorStop(0, '#ff69b4');
   gradient.addColorStop(0.3, '#ff1493');
@@ -1051,10 +1312,20 @@ function drawJellybean() {
   gradient.addColorStop(1, '#ffb6c1');
   ctx.fillStyle = gradient;
   ctx.beginPath();
-  ctx.ellipse(x + w / 2, y + h / 2, w / 2 - 2, h / 2 - 2, 0, 0, Math.PI * 2);
+  ctx.ellipse(cx, cy, w / 2 - 2, h / 2 - 2, 0, 0, Math.PI * 2);
   ctx.fill();
   ctx.strokeStyle = '#c71585';
   ctx.lineWidth = 2;
+  ctx.stroke();
+  ctx.fillStyle = '#ffffff';
+  ctx.strokeStyle = '#cccccc';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(cx, cy + h / 4);
+  ctx.lineTo(cx - w / 4, cy - h / 4);
+  ctx.lineTo(cx + w / 4, cy - h / 4);
+  ctx.closePath();
+  ctx.fill();
   ctx.stroke();
 }
 
@@ -1704,28 +1975,28 @@ function updateBiplane() {
     }
   });
   level4Bombs.forEach(b => {
-    if (!b.collected && rectOverlap(
+    if (b.collected) return;
+    b.x += b.vx;
+    if (b.x < -50) {
+      b.x = GAME_WIDTH + 50 + Math.random() * 150;
+      b.y = 80 + Math.random() * (GAME_HEIGHT - 160);
+    }
+    if (rectOverlap(
       { x: chicken.x, y: chicken.y, width: BIPLANE_WIDTH, height: BIPLANE_HEIGHT },
-      b, 5)) {
+      { x: b.x, y: b.y, width: b.width, height: b.height }, 5)) {
       b.collected = true;
       level4BombActive = true;
     }
   });
 
-  if (level4Shield && !level4Shield.collected && rectOverlap(
-    { x: chicken.x, y: chicken.y, width: BIPLANE_WIDTH, height: BIPLANE_HEIGHT },
-    level4Shield, 5)) {
-    level4Shield.collected = true;
-    level4ShieldTimer = 600;
-  }
-
-  if (level4ShieldTimer > 0) {
+  if (chicken.invincibleTimer > 0) {
+    chicken.invincibleTimer--;
+    chicken.invincible = true;
+  } else if (keys['Space'] && level4ShieldTimer > 0) {
     level4ShieldTimer--;
     chicken.invincible = true;
-    chicken.invincibleTimer = level4ShieldTimer;
-  } else if (chicken.invincible) {
-    chicken.invincibleTimer--;
-    if (chicken.invincibleTimer <= 0) chicken.invincible = false;
+  } else {
+    chicken.invincible = false;
   }
 }
 
@@ -1757,10 +2028,10 @@ function spawnLevel4Enemy(side, type, extra) {
   return { x, y, vx, vy };
 }
 
-const LEVEL_4_LANDERS_REQUIRED = 50;
-const LEVEL_4_BEETLES_REQUIRED = 50;
-const LEVEL_4_SPAWN_INTERVAL = 8;
-const LEVEL_4_BEETLE_SPAWN_INTERVAL = 4;
+const LEVEL_4_LANDERS_REQUIRED = 95;  // 63 * 1.5
+const LEVEL_4_BEETLES_REQUIRED = 95;  // 63 * 1.5
+const LEVEL_4_SPAWN_INTERVAL = 12;    // 8 * 1.5
+const LEVEL_4_BEETLE_SPAWN_INTERVAL = 6;  // 4 * 1.5
 
 function isLevel4EnemyVisible(enemy) {
   return enemy.x + enemy.width > 0 && enemy.x < GAME_WIDTH &&
@@ -1860,8 +2131,9 @@ function updateLevel4Enemies() {
     e.shootTimer--;
     if (e.type === 'lander' && e.shootTimer <= 0) {
       e.shootTimer = 60 + Math.floor(Math.random() * 40);
-      for (let j = 0; j < 8; j++) {
-        const a = (j / 8) * Math.PI * 2 + Math.random() * 0.3;
+      const landerCount = 5; // 8 * 0.6 (40% reduction)
+      for (let j = 0; j < landerCount; j++) {
+        const a = (j / landerCount) * Math.PI * 2 + Math.random() * 0.3;
         level4Projectiles.push({
           x: e.x + e.width / 2,
           y: e.y + e.height / 2,
@@ -1870,12 +2142,13 @@ function updateLevel4Enemies() {
           radius: 6,
           color: e.fragmentColors[j % e.fragmentColors.length],
           enemy: true,
-          damage: 0.25
+          damage: 0.5
         });
       }
     }
     if (e.type === 'beetle' && e.shootTimer <= 0) {
-      e.shootTimer = 25 + Math.floor(Math.random() * 25);
+      e.shootTimer = 33 + Math.floor(Math.random() * 34); // 25% fewer shots
+
       const a = Math.random() * Math.PI * 2;
       level4Projectiles.push({
         x: e.x + e.width / 2,
@@ -1885,7 +2158,7 @@ function updateLevel4Enemies() {
         radius: 8,
         color: '#4488ff',
         enemy: true,
-        damage: 0.25
+        damage: 0.5
       });
     }
     if (e.type === 'astronaut' && e.shootTimer <= 0) {
@@ -2312,9 +2585,15 @@ function updateEggs() {
                 const ocx = other.x + other.width / 2;
                 const ocy = other.y + other.height / 2;
                 if (Math.hypot(cx - ocx, cy - ocy) <= LEVEL_4_BOMB_RADIUS) {
-                  if (other.type === 'lander') level4LandersKilled++;
-                  else if (other.type === 'beetle') level4BeetlesKilled++;
-                  else triggerEnemyExplosion(ocx, ocy);
+                  if (other.type === 'lander') {
+                    level4LandersKilled++;
+                    spawnLevel4EnemyDebris(other);
+                  } else if (other.type === 'beetle') {
+                    level4BeetlesKilled++;
+                    spawnLevel4EnemyDebris(other);
+                  } else {
+                    triggerEnemyExplosion(ocx, ocy);
+                  }
                   level4Enemies.splice(j, 1);
                 }
               }
@@ -2330,9 +2609,13 @@ function updateEggs() {
             }
             enemy.health--;
             if (enemy.health <= 0) {
-              if (enemy.type === 'lander') level4LandersKilled++;
-              else if (enemy.type === 'beetle') level4BeetlesKilled++;
-              else if (enemy.type === 'astronaut') {
+              if (enemy.type === 'lander') {
+                level4LandersKilled++;
+                spawnLevel4EnemyDebris(enemy);
+              } else if (enemy.type === 'beetle') {
+                level4BeetlesKilled++;
+                spawnLevel4EnemyDebris(enemy);
+              } else if (enemy.type === 'astronaut') {
                 level4AstronautKilled = true;
                 triggerAstronautExplosion();
               } else {
@@ -2562,6 +2845,7 @@ function checkLevel3Complete() {
 
 function checkLevel4Complete() {
   if (level4AstronautKilled && level4Enemies.length === 0) {
+    if (level4AstronautExploding) return;
     document.getElementById('you-won-screen').classList.add('visible');
     gameState = STATE.YOU_WON;
   }
@@ -2647,23 +2931,26 @@ function gameLoop() {
       updateAstronautExplosion();
       drawBackgroundLevel4();
       drawAstronautExplosion();
+      drawLevel4ShieldBar();
       drawControlsHint();
     } else {
       if (!gameOver) {
         updateChicken();
         updateEggs();
         updateLevel4Enemies();
+        updateLevel4EnemyDebris();
         updateEnemyExplosions();
       }
       drawBackgroundLevel4();
       drawLevel4Projectiles();
       drawLevel4Enemies();
+      drawLevel4EnemyDebris();
       drawLevel4Bombs();
       drawLevel4MedCrosses();
-      drawLevel4ShieldItem();
       eggs.forEach(drawEgg);
       drawBiplane();
       drawLevel4ShieldEffect();
+      drawLevel4ShieldBar();
       drawEnemyExplosions();
       checkLevel4Complete();
       drawControlsHint();
@@ -2688,17 +2975,16 @@ function init() {
     document.getElementById('main-menu').classList.add('hidden');
     startLevel1();
   });
-  const skipBtn = document.getElementById('skip-to-level');
-  if (skipBtn) skipBtn.addEventListener('click', (e) => {
-    e.preventDefault();
-    document.getElementById('main-menu').classList.add('hidden');
-    startLevel1();
-  });
-  const skip4Btn = document.getElementById('skip-to-level4');
-  if (skip4Btn) skip4Btn.addEventListener('click', (e) => {
-    e.preventDefault();
-    document.getElementById('main-menu').classList.add('hidden');
-    startLevel4();
+  document.querySelectorAll('.skip-level').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      document.getElementById('main-menu').classList.add('hidden');
+      const level = parseInt(link.dataset.level, 10);
+      if (level === 1) startLevel1();
+      else if (level === 2) startLevel2();
+      else if (level === 3) startLevel3();
+      else if (level === 4) startLevel4();
+    });
   });
   document.getElementById('menu-btn').addEventListener('click', () => {
     document.getElementById('you-won-screen').classList.remove('visible');

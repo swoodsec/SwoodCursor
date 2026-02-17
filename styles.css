@@ -88,6 +88,30 @@ body {
   box-shadow: 0 0 30px rgba(102, 126, 234, 0.5);
 }
 
+.skip-label {
+  margin-top: 24px;
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.skip-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 16px;
+}
+
+.skip-links a {
+  font-size: 14px;
+  color: #ffd93d;
+  text-decoration: none;
+}
+
+.skip-links a:hover {
+  text-decoration: underline;
+}
+
 /* Level Complete Screen */
 #level-complete-screen {
   position: absolute;
