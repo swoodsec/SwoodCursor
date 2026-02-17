@@ -375,6 +375,7 @@ let gameOver = false;
 let keys = {};
 let menuDanceOffset = 0;
 let level1Transitioning = false;
+let level1Countdown = 0;
 
 // Input
 document.addEventListener('keydown', (e) => {
@@ -397,6 +398,7 @@ document.getElementById('retry-btn').addEventListener('click', () => {
 function startLevel1() {
   gameState = STATE.LEVEL_1;
   level1Transitioning = false;
+  level1Countdown = 180; // 3 seconds at 60fps
   platforms = platformsLevel1;
   resetGame();
   initEnemies();
@@ -616,6 +618,48 @@ function drawMenu() {
   }
 
   drawMenuChicken(bounceY);
+}
+
+function drawLevel1Countdown() {
+  const sec = Math.ceil(level1Countdown / 60);
+  if (sec < 1) return;
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 120px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(String(sec), GAME_WIDTH / 2, GAME_HEIGHT / 2);
+  ctx.restore();
+}
+
+function drawControlsHint() {
+  const keyW = 18;
+  const keyH = 16;
+  const gap = 3;
+  const baseX = 20;
+  const baseY = GAME_HEIGHT - 70;
+  ctx.save();
+  ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  ctx.strokeStyle = 'rgba(255,255,255,0.5)';
+  ctx.lineWidth = 1;
+  const drawKey = (x, y, w, h, label) => {
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeRect(x, y, w, h);
+    ctx.fillStyle = 'rgba(255,255,255,0.7)';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, x + w / 2, y + h / 2);
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+  };
+  drawKey(baseX + keyW + gap, baseY, keyW, keyH, 'W');
+  drawKey(baseX, baseY + keyH + gap, keyW, keyH, 'A');
+  drawKey(baseX + keyW + gap, baseY + keyH + gap, keyW, keyH, 'S');
+  drawKey(baseX + (keyW + gap) * 2, baseY + keyH + gap, keyW, keyH, 'D');
+  drawKey(baseX + (keyW + gap) * 4, baseY + keyH + gap, keyW + 4, keyH, 'J');
+  ctx.restore();
 }
 
 // ========== LEVEL 1 - Moon ==========
@@ -1601,10 +1645,10 @@ function circleRectOverlap(cx, cy, radius, rect) {
 function updateBiplane() {
   chicken.vx = 0;
   chicken.vy = 0;
-  if (keys['KeyA'] || keys['ArrowLeft']) chicken.vx = -BIPLANE_SPEED;
-  if (keys['KeyD'] || keys['ArrowRight']) chicken.vx = BIPLANE_SPEED;
-  if (keys['KeyW'] || keys['ArrowUp']) chicken.vy = -BIPLANE_SPEED;
-  if (keys['KeyS'] || keys['ArrowDown']) chicken.vy = BIPLANE_SPEED;
+  if (keys['KeyA']) chicken.vx = -BIPLANE_SPEED;
+  if (keys['KeyD']) chicken.vx = BIPLANE_SPEED;
+  if (keys['KeyW']) chicken.vy = -BIPLANE_SPEED;
+  if (keys['KeyS']) chicken.vy = BIPLANE_SPEED;
   chicken.x += chicken.vx;
   chicken.y += chicken.vy;
   chicken.x = Math.max(20, Math.min(GAME_WIDTH - BIPLANE_WIDTH - 20, chicken.x));
@@ -1623,7 +1667,7 @@ function updateBiplane() {
     }
   });
 
-  if (keys['KeyJ'] || keys['ControlLeft']) {
+  if (keys['KeyJ']) {
     level4FireCooldown--;
     if (level4FireCooldown <= 0) {
       level4FireCooldown = 60 / LEVEL_4_FIRE_RATE;
@@ -1898,11 +1942,11 @@ function updateChicken() {
     return;
   }
   chicken.vx = 0;
-  if (keys['KeyA'] || keys['ArrowLeft']) {
+  if (keys['KeyA']) {
     chicken.vx = -MOVE_SPEED;
     chicken.facingRight = false;
   }
-  if (keys['KeyD'] || keys['ArrowRight']) {
+  if (keys['KeyD']) {
     chicken.vx = MOVE_SPEED;
     chicken.facingRight = true;
   }
@@ -1948,7 +1992,7 @@ function updateChicken() {
     });
   }
 
-  const jumpKey = keys['Space'] || keys['KeyW'] || keys['ArrowUp'];
+  const jumpKey = keys['Space'] || keys['KeyW'];
   if (jumpKey) {
     if (chicken.onGround) {
       chicken.vy = JUMP_FORCE;
@@ -1965,9 +2009,26 @@ function updateChicken() {
 
   chicken.lookingUp = keys['KeyE'] || false;
 
+  // Level 1: respawn on platform and lose 1 health when falling off screen
+  if (gameState === STATE.LEVEL_1 && chicken.y > GAME_HEIGHT) {
+    const spawnPlatform = platforms[0];
+    chicken.x = spawnPlatform.x + 80;
+    chicken.y = spawnPlatform.y - chicken.height;
+    chicken.vx = 0;
+    chicken.vy = 0;
+    chicken.onGround = true;
+    chicken.canDoubleJump = true;
+    health--;
+    updateHealthDisplay();
+    if (health <= 0) {
+      gameOver = true;
+      document.getElementById('game-over-screen').classList.add('visible');
+    }
+  }
+
   if (gameState === STATE.LEVEL_3) {
     if (megaBurstTimer > 0) megaBurstTimer--;
-    if (keys['KeyJ'] || keys['ControlLeft']) {
+    if (keys['KeyJ']) {
       level3FireCooldown--;
       if (level3FireCooldown <= 0) {
         level3FireCooldown = 60 / LEVEL_3_FIRE_RATE;
@@ -1996,7 +2057,7 @@ function updateChicken() {
     } else {
       level3FireCooldown = 0;
     }
-  } else if (keys['KeyJ'] || keys['ControlLeft']) {
+  } else if (keys['KeyJ']) {
     if (!chicken.justShot) {
       let vx, vy;
       if (chicken.lookingUp) {
@@ -2514,7 +2575,9 @@ function gameLoop() {
   }
 
   if (gameState === STATE.LEVEL_1) {
-    if (!gameOver) {
+    if (level1Countdown > 0) {
+      level1Countdown--;
+    } else if (!gameOver) {
       updateChicken();
       updateEggs();
       updateEnemies();
@@ -2532,6 +2595,8 @@ function gameLoop() {
     bats.forEach(drawBat);
     drawEnemyExplosions();
     drawChicken();
+    if (level1Countdown > 0) drawLevel1Countdown();
+    drawControlsHint();
   } else if (gameState === STATE.LEVEL_2) {
     if (!gameOver) {
       updateChicken();
@@ -2543,6 +2608,7 @@ function gameLoop() {
     eggs.forEach(drawEgg);
     drawBoss();
     drawChicken();
+    drawControlsHint();
   } else if (gameState === STATE.LEVEL_3) {
     if (!gameOver && !level3Exploding) {
       updateChicken();
@@ -2575,11 +2641,13 @@ function gameLoop() {
     drawChicken();
     if (!level3Exploding) drawLevel3Timer();
     else drawLevel3Explosion();
+    drawControlsHint();
   } else if (gameState === STATE.LEVEL_4) {
     if (level4AstronautExploding) {
       updateAstronautExplosion();
       drawBackgroundLevel4();
       drawAstronautExplosion();
+      drawControlsHint();
     } else {
       if (!gameOver) {
         updateChicken();
@@ -2598,6 +2666,7 @@ function gameLoop() {
       drawLevel4ShieldEffect();
       drawEnemyExplosions();
       checkLevel4Complete();
+      drawControlsHint();
     }
   }
 
