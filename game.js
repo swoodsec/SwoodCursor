@@ -3,6 +3,73 @@
 
 let canvas, ctx;
 
+const soundPools = {};
+const SOUND_VOLUME = 0.5;
+const MUSIC_VOLUME = 0.15;
+const SOUNDS_PER_SECOND = 4;
+const lastShootTimes = [0, 0, 0, 0];
+const lastExplodeTimes = [0, 0, 0, 0];
+const musicTracks = {
+  menu: 'menu.mp3',
+  level1: 'levelone.mp3',
+  level2: 'disco.mp3',
+  level3: 'breakout.mp3',
+  level4: 'theskies.mp3'
+};
+let currentMusic = null;
+let musicEl = null;
+function initAudio() {
+  const poolSizes = { shoot: 4, explode: 3, powerup: 2 };
+  for (const name of ['shoot', 'explode', 'powerup']) {
+    soundPools[name] = [];
+    for (let i = 0; i < poolSizes[name]; i++) {
+      const a = new Audio(name + '.wav');
+      a.volume = SOUND_VOLUME;
+      soundPools[name].push(a);
+    }
+  }
+  if (!musicEl) {
+    musicEl = new Audio();
+    musicEl.volume = MUSIC_VOLUME;
+    musicEl.loop = true;
+  }
+}
+function playMusic(state) {
+  const file = musicTracks[state];
+  if (!file || !musicEl) return;
+  if (currentMusic === state) return;
+  currentMusic = state;
+  try {
+    musicEl.pause();
+    musicEl.src = file;
+    musicEl.play();
+  } catch (_) {}
+}
+function canPlayRateLimited(times) {
+  const now = Date.now();
+  if (now - times[0] >= 1000) return true;
+  return false;
+}
+function recordPlay(times) {
+  const now = Date.now();
+  for (let i = 0; i < times.length - 1; i++) times[i] = times[i + 1];
+  times[times.length - 1] = now;
+}
+function playSound(name, rateLimitTimes) {
+  const pool = soundPools[name];
+  if (!pool) return;
+  if (rateLimitTimes && !canPlayRateLimited(rateLimitTimes)) return;
+  const a = pool.find(el => el.paused || el.ended) || pool[0];
+  try {
+    a.currentTime = 0;
+    a.play();
+    if (rateLimitTimes) recordPlay(rateLimitTimes);
+  } catch (_) {}
+}
+function playShoot() { playSound('shoot', lastShootTimes); }
+function playExplode() { playSound('explode', lastExplodeTimes); }
+function playPowerup() { playSound('powerup'); }
+
 function initCanvas() {
   canvas = document.getElementById('game-canvas');
   if (!canvas) {
@@ -24,8 +91,8 @@ const GAME_WIDTH = 1200;
 const GAME_HEIGHT = 600;
 
 // Game states
-const STATE = { MENU: 'menu', LEVEL_1: 'level1', LEVEL_2: 'level2', LEVEL_3: 'level3', LEVEL_4: 'level4', GAME_OVER: 'gameover', YOU_WON: 'youwon' };
-let gameState = STATE.MENU;
+const STATE = { SPLASH: 'splash', MENU: 'menu', LEVEL_1: 'level1', LEVEL_2: 'level2', LEVEL_3: 'level3', LEVEL_4: 'level4', GAME_OVER: 'gameover', YOU_WON: 'youwon' };
+let gameState = STATE.SPLASH;
 
 // Physics
 const GRAVITY = 0.6;
@@ -86,8 +153,8 @@ const BIPLANE_WIDTH = 60;
 const BIPLANE_HEIGHT = 35;
 const LEVEL_4_EGG_SIZE = 5;
 const LEVEL_4_EGG_SPEED = 14;
-const LEVEL_4_FIRE_RATE = 12;
-const LEVEL_4_BOMB_RADIUS = 100;
+const LEVEL_4_FIRE_RATE = 6;
+const LEVEL_4_BOMB_RADIUS = 200;
 const LEVEL_4_SHIELD_MAX = 600;
 const RAIL_DAMAGE = 2;
 let level4Stars = [];
@@ -287,6 +354,7 @@ function drawAstronautExplosion() {
 }
 
 function spawnLevel4EnemyDebris(enemy) {
+  playExplode();
   const vx = 5 + Math.random() * 6;
   const vy = (Math.random() - 0.5) * 8;
   level4EnemyDebris.push({
@@ -378,6 +446,7 @@ function drawLevel4EnemyDebris() {
 }
 
 function triggerEnemyExplosion(x, y) {
+  playExplode();
   for (let i = 0; i < 25; i++) {
     enemyExplosions.push({
       x: x + (Math.random() - 0.5) * 40,
@@ -480,6 +549,20 @@ let menuChickenFacingRight = true;
 let menuChickenFacingDown = false;
 let menuChickenPhase = 'hidden'; // 'hidden' | 'popping' | 'firing' | 'leaving'
 let menuChickenPhaseTimer = 0;
+
+// Splash screen - samurai chicken animation
+let splashTime = 0;
+let splashChickenX = 0;
+let splashChickenY = 0;
+let splashChickenFacingRight = true;
+let splashSwordAngle = 0;
+const SPLASH_TEXT = 'Click to Continue';
+const splashEnemies = [];
+const splashExplosions = [];
+let splashSpawnTimer = 0;
+const SPLASH_SWORD_PIVOT_X = 32;
+const SPLASH_SWORD_PIVOT_Y = 24;
+
 let level1Transitioning = false;
 let level1Countdown = 0;
 
@@ -503,6 +586,7 @@ document.getElementById('retry-btn').addEventListener('click', () => {
 
 function startLevel1() {
   gameState = STATE.LEVEL_1;
+  playMusic('level1');
   level1Transitioning = false;
   level1Countdown = 180; // 3 seconds at 60fps
   platforms = platformsLevel1;
@@ -513,6 +597,7 @@ function startLevel1() {
 
 function startLevel2() {
   gameState = STATE.LEVEL_2;
+  playMusic('level2');
   platforms = platformsLevel2;
   resetGame();
   initBoss();
@@ -521,6 +606,7 @@ function startLevel2() {
 
 function startLevel3() {
   gameState = STATE.LEVEL_3;
+  playMusic('level3');
   level3Transitioning = false;
   platforms = platformsLevel3;
   resetGame();
@@ -600,6 +686,7 @@ function spawnLevel4Bombs() {
 
 function startLevel4() {
   gameState = STATE.LEVEL_4;
+  playMusic('level4');
   platforms = platformsLevel3;
   resetGame();
   initLevel4();
@@ -1945,6 +2032,7 @@ function updateBiplane() {
       const ly = chicken.y + 8;
       const ry = chicken.y + BIPLANE_HEIGHT - 13;
       const ex = chicken.x + BIPLANE_WIDTH;
+      playShoot();
       eggs.push({
         x: ex, y: ly - LEVEL_4_EGG_SIZE,
         vx: LEVEL_4_EGG_SPEED, vy: 0,
@@ -1968,6 +2056,7 @@ function updateBiplane() {
     if (rectOverlap(
       { x: chicken.x, y: chicken.y, width: BIPLANE_WIDTH, height: BIPLANE_HEIGHT },
       m, 5)) {
+      playPowerup();
       m.x = GAME_WIDTH + 50 + Math.random() * 150;
       m.y = 80 + Math.random() * (GAME_HEIGHT - 160);
       health = 5.0;
@@ -1984,6 +2073,7 @@ function updateBiplane() {
     if (rectOverlap(
       { x: chicken.x, y: chicken.y, width: BIPLANE_WIDTH, height: BIPLANE_HEIGHT },
       { x: b.x, y: b.y, width: b.width, height: b.height }, 5)) {
+      playPowerup();
       b.collected = true;
       level4BombActive = true;
     }
@@ -2307,6 +2397,7 @@ function updateChicken() {
         level3FireCooldown = 60 / LEVEL_3_FIRE_RATE;
         const cx = chicken.x + chicken.width / 2 - EGG_SIZE;
         const cy = chicken.y + 5 - EGG_SIZE;
+        playShoot();
         if (megaBurstTimer > 0) {
           const spreadRad = (30 * Math.PI / 180) / 2;
           for (let i = 0; i < 3; i++) {
@@ -2332,6 +2423,7 @@ function updateChicken() {
     }
   } else if (keys['KeyJ']) {
     if (!chicken.justShot) {
+      playShoot();
       let vx, vy;
       if (chicken.lookingUp) {
         vx = 0;
@@ -2398,6 +2490,7 @@ function updateChicken() {
       height: level3Jellybean.height
     };
     if (rectOverlap(chicken, jb, 2)) {
+      playPowerup();
       level3Jellybean.collected = true;
       megaBurstTimer = 600;
     }
@@ -2851,7 +2944,283 @@ function checkLevel4Complete() {
   }
 }
 
+function spawnSplashEnemy() {
+  const type = Math.random() < 0.5 ? 'blob' : 'bug';
+  const side = Math.floor(Math.random() * 4);
+  let x, y;
+  if (side === 0) { x = -30; y = 80 + Math.random() * (GAME_HEIGHT - 160); }
+  else if (side === 1) { x = GAME_WIDTH + 30; y = 80 + Math.random() * (GAME_HEIGHT - 160); }
+  else if (side === 2) { x = 80 + Math.random() * (GAME_WIDTH - 160); y = -30; }
+  else { x = 80 + Math.random() * (GAME_WIDTH - 160); y = GAME_HEIGHT + 30; }
+  const w = type === 'blob' ? 28 : 24;
+  const h = type === 'blob' ? 24 : 20;
+  const dx = (GAME_WIDTH / 2 - x) * 0.015;
+  const dy = (GAME_HEIGHT / 2 - y) * 0.015;
+  splashEnemies.push({ x, y, type, w, h, vx: dx, vy: dy });
+}
+
+function triggerSplashExplosion(x, y) {
+  const cx = GAME_WIDTH / 2;
+  const cy = GAME_HEIGHT / 2;
+  const dx = x - cx;
+  const dy = y - cy;
+  const dist = Math.hypot(dx, dy) || 1;
+  const dirX = dx / dist;
+  const dirY = dy / dist;
+  const colors = ['#7cfc00', '#32cd32', '#ffdd00', '#ff8800', '#e63946'];
+  for (let i = 0; i < 12; i++) {
+    const angle = Math.atan2(dirY, dirX) + (Math.random() - 0.5) * 1.2;
+    const speed = 4 + Math.random() * 8;
+    splashExplosions.push({
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      life: 1,
+      size: 4 + Math.random() * 8
+    });
+  }
+}
+
+function updateSplashEnemies() {
+  splashSpawnTimer++;
+  if (splashSpawnTimer >= 45) {
+    splashSpawnTimer = 0;
+    if (splashEnemies.length < 6) spawnSplashEnemy();
+  }
+  const tip = getSplashSwordTip();
+  const hitRadius = 55;
+  const swordActive = Math.abs(splashSwordAngle) < 0.5;
+  for (let i = splashEnemies.length - 1; i >= 0; i--) {
+    const e = splashEnemies[i];
+    e.x += e.vx;
+    e.y += e.vy;
+    if (swordActive) {
+      const ex = e.x + e.w / 2;
+      const ey = e.y + e.h / 2;
+      if (Math.hypot(tip.x - ex, tip.y - ey) < hitRadius) {
+        triggerSplashExplosion(ex, ey);
+        splashEnemies.splice(i, 1);
+      }
+    }
+  }
+  splashExplosions.forEach(p => {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life -= 0.025;
+  });
+  for (let i = splashExplosions.length - 1; i >= 0; i--) {
+    if (splashExplosions[i].life <= 0) splashExplosions.splice(i, 1);
+  }
+}
+
+function drawSplashEnemy(e) {
+  if (e.type === 'blob') {
+    const gradient = ctx.createRadialGradient(
+      e.x + e.w / 2 - 5, e.y + e.h / 2 - 5, 0,
+      e.x + e.w / 2, e.y + e.h / 2, e.w
+    );
+    gradient.addColorStop(0, '#7cfc00');
+    gradient.addColorStop(0.5, '#32cd32');
+    gradient.addColorStop(1, '#228b22');
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.ellipse(e.x + e.w / 2, e.y + e.h / 2, e.w / 2 - 2, e.h / 2 - 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#1a5f1a';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(e.x + 8, e.y + 8, 3, 0, Math.PI * 2);
+    ctx.arc(e.x + 20, e.y + 8, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#333';
+    ctx.beginPath();
+    ctx.arc(e.x + 9, e.y + 8, 1.5, 0, Math.PI * 2);
+    ctx.arc(e.x + 21, e.y + 8, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.fillStyle = '#ffdd00';
+    ctx.beginPath();
+    ctx.ellipse(e.x + e.w / 2, e.y + e.h / 2, e.w / 2 - 2, e.h / 2 - 2, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#ccaa00';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = '#333';
+    ctx.beginPath();
+    ctx.arc(e.x + 8, e.y + 10, 2, 0, Math.PI * 2);
+    ctx.arc(e.x + 16, e.y + 10, 2, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawSplashExplosions() {
+  splashExplosions.forEach(p => {
+    ctx.fillStyle = p.color;
+    ctx.globalAlpha = p.life;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.globalAlpha = 1;
+}
+
+function updateSplashAnimation() {
+  splashTime++;
+  const danceSpeed = 0.04;
+  const danceRange = 400;
+  splashChickenX = GAME_WIDTH / 2 + Math.sin(splashTime * danceSpeed) * danceRange;
+  splashChickenY = GAME_HEIGHT / 2 + Math.sin(splashTime * danceSpeed * 1.3) * 30;
+  if (Math.sin(splashTime * danceSpeed) > 0.1) splashChickenFacingRight = true;
+  else if (Math.sin(splashTime * danceSpeed) < -0.1) splashChickenFacingRight = false;
+  splashSwordAngle = Math.sin(splashTime * 0.15) * Math.PI * 0.6 - Math.PI / 4;
+
+  updateSplashEnemies();
+
+}
+
+function drawSplashSamuraiChicken() {
+  const scale = 5;
+  const cx = splashChickenX;
+  const cy = splashChickenY;
+  ctx.save();
+  ctx.translate(cx, cy);
+  if (!splashChickenFacingRight) ctx.scale(-1, 1);
+  ctx.scale(scale, scale);
+  ctx.translate(-20, -22);
+
+  ctx.fillStyle = '#fff5d4';
+  ctx.beginPath();
+  ctx.ellipse(20, 28, 14, 18, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#e8c870';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.fillStyle = '#fff5d4';
+  ctx.beginPath();
+  ctx.arc(20, 12, 10, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+
+  ctx.fillStyle = '#e63946';
+  ctx.beginPath();
+  ctx.moveTo(18, 2);
+  ctx.lineTo(22, 2);
+  ctx.lineTo(20, -2);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = '#ff9f43';
+  ctx.beginPath();
+  ctx.moveTo(28, 12);
+  ctx.lineTo(38, 14);
+  ctx.lineTo(28, 16);
+  ctx.closePath();
+  ctx.fill();
+
+  ctx.fillStyle = '#333';
+  ctx.beginPath();
+  ctx.arc(26, 10, 2, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = '#c41e3a';
+  ctx.beginPath();
+  ctx.ellipse(20, 4, 12, 5, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#8b0000';
+  ctx.fillRect(8, 2, 24, 3);
+
+  ctx.fillStyle = '#e8c870';
+  ctx.beginPath();
+  ctx.moveTo(26, 22);
+  ctx.quadraticCurveTo(36, 20, SPLASH_SWORD_PIVOT_X, SPLASH_SWORD_PIVOT_Y);
+  ctx.quadraticCurveTo(36, 28, 26, 26);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = '#d4b860';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.save();
+  ctx.translate(SPLASH_SWORD_PIVOT_X, SPLASH_SWORD_PIVOT_Y);
+  ctx.rotate(splashSwordAngle);
+  ctx.fillStyle = '#c0c0c0';
+  ctx.fillRect(0, -1.5, 35, 3);
+  ctx.fillStyle = '#8b4513';
+  ctx.fillRect(-3, -2, 6, 4);
+  ctx.fillStyle = '#2a2a2a';
+  ctx.fillRect(32, -2, 6, 4);
+  ctx.restore();
+
+  ctx.restore();
+}
+
+function getSplashSwordTip() {
+  const scale = 5;
+  const tipLocalX = SPLASH_SWORD_PIVOT_X + 35 * Math.cos(splashSwordAngle);
+  const tipLocalY = SPLASH_SWORD_PIVOT_Y + 35 * Math.sin(splashSwordAngle);
+  const dx = (tipLocalX - 20) * scale;
+  const dy = (tipLocalY - 22) * scale;
+  return {
+    x: splashChickenX + (splashChickenFacingRight ? 1 : -1) * dx,
+    y: splashChickenY + dy
+  };
+}
+
+function drawSplashText() {
+  const bannerHeight = 48;
+  const bannerY = GAME_HEIGHT - bannerHeight;
+  ctx.fillStyle = 'rgba(0,0,0,0.6)';
+  ctx.fillRect(0, bannerY, GAME_WIDTH, bannerHeight);
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(0, bannerY, GAME_WIDTH, bannerHeight);
+
+  const text = '  ★  ' + SPLASH_TEXT + '  ★  ' + SPLASH_TEXT + '  ★  ';
+  ctx.font = 'bold 24px sans-serif';
+  const textWidth = ctx.measureText(text).width;
+  const scrollSpeed = 2;
+  const offset = (splashTime * scrollSpeed) % textWidth;
+  const x = GAME_WIDTH - offset;
+  const baseY = bannerY + bannerHeight / 2;
+
+  ctx.fillStyle = '#ffffff';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, x, baseY);
+  ctx.fillText(text, x - textWidth, baseY);
+}
+
+function drawSplashScreen() {
+  updateSplashAnimation();
+  const gradient = ctx.createLinearGradient(0, 0, 0, GAME_HEIGHT);
+  gradient.addColorStop(0, '#0a0a1a');
+  gradient.addColorStop(0.5, '#1a1a3a');
+  gradient.addColorStop(1, '#0f0f23');
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+  for (let i = 0; i < 60; i++) {
+    const x = (i * 47 + splashTime * 0.5) % (GAME_WIDTH + 40) - 20;
+    const y = (i * 31 + 17) % GAME_HEIGHT;
+    ctx.fillStyle = `rgba(255,255,255,${0.3 + Math.sin(splashTime * 0.1 + i) * 0.2})`;
+    ctx.beginPath();
+    ctx.arc(x, y, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  splashEnemies.forEach(drawSplashEnemy);
+  drawSplashExplosions();
+  drawSplashSamuraiChicken();
+  drawSplashText();
+}
+
 function gameLoop() {
+  if (gameState === STATE.SPLASH) {
+    drawSplashScreen();
+    requestAnimationFrame(gameLoop);
+    return;
+  }
   if (gameState === STATE.MENU) {
     drawMenu();
     requestAnimationFrame(gameLoop);
@@ -2969,7 +3338,15 @@ function init() {
       '</div>';
     return;
   }
+  initAudio();
   document.getElementById('ui-overlay').style.display = 'none';
+  canvas.addEventListener('click', () => {
+    if (gameState === STATE.SPLASH) {
+      gameState = STATE.MENU;
+      document.getElementById('main-menu').classList.remove('hidden');
+      playMusic('menu');
+    }
+  });
   document.getElementById('start-btn').addEventListener('click', (e) => {
     e.preventDefault();
     document.getElementById('main-menu').classList.add('hidden');
@@ -2991,6 +3368,7 @@ function init() {
     document.getElementById('main-menu').classList.remove('hidden');
     document.getElementById('ui-overlay').style.display = 'none';
     gameState = STATE.MENU;
+    playMusic('menu');
   });
   gameLoop();
 }
